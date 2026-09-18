@@ -1,18 +1,44 @@
+<div align="center">
+
 # jev-e2e
 
-Test web applications from natural-language cases, with evidence for every verdict.
+**Test your website in plain English. Get evidence for every result.**
 
-**Status:** alpha. Includes a CLI, local workbench, demo app, fixtures, saved-flow replay, cancellation, and JSON/HTML/screenshot evidence. Install from source; an npm release is not yet available. See [test results](TEST_RESULTS.md) for measured validation and remaining gates.
+[![Status: alpha](https://img.shields.io/badge/status-alpha-orange)](TEST_RESULTS.md)
+[![Node: 22+](https://img.shields.io/badge/node-22%2B-339933)](https://nodejs.org/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-The first release runs locally against Chromium websites. An optional generative model interprets freeform cases into semantic steps, input bindings, and expectations. Explicit cases use documented templates without that model; saved plans need no new interpretation. Jev selects observed controls and navigation. Playwright executes the steps and independently checks expectations. The workbench and CLI share the same runner.
+[Quick start](#quick-start) · [Write a test](#write-a-test) · [Benchmarks](#live-ebay-benchmark) · [CLI reference](docs/USAGE.md) · [Contribute](CONTRIBUTING.md)
 
-Every case returns **PASS**, **FAIL**, or **BLOCKED**. A completed navigation or a confident model response cannot substitute for checked expectations.
+</div>
 
-The workbench uses a warm light background, orange accents, and spacious typography inspired by Firecrawl, with original jev-e2e branding.
+Describe a flow and what should be true at the end. jev-e2e turns it into a test plan, uses Jev to select controls on the page, and runs the test with Playwright. Each result is **PASS**, **FAIL**, or **BLOCKED**, with an HTML report, JSON, and masked screenshots.
 
-## Quick start from this repository
+**Local alpha:** CLI and browser workbench for Chromium websites. Install from source; an npm release is not yet available.
 
-Requires Node 22+. Install dependencies and Chromium explicitly:
+## Watch the eBay comparison
+
+Search and filter products → add two items → change quantity → remove an item → refresh and verify the cart. Three models, the same written steps, and 31 independent checks. The video shows actual browser recordings at **10.77× playback**.
+
+https://github.com/user-attachments/assets/3f6eea28-9f85-4d9c-9a76-ba90311ff673
+
+[Download the 10-second video](docs/assets/ebay-benchmark.mp4) · [All nine attempts and methodology](docs/benchmarks/ebay-2026-09-18.md)
+
+This is a UI execution experiment with a shared human-authored plan and an extended benchmark observer. It does not measure natural-language planning or the unmodified CLI's reliability on eBay.
+
+## Why jev-e2e?
+
+- **Write cases in plain English.** Use an optional planner for prose, or explicit `Goal`, `Step`, and `Expect` templates without it.
+- **Check the outcome.** Playwright verifies expectations independently. Missing evidence or unsupported requirements produce BLOCKED.
+- **See what happened.** Reports include expected and observed values, actions, timing, provider usage, and screenshots.
+- **Replay successful flows.** Reuse saved controls and recheck assertions. An unchanged flow can replay with zero model calls; stale targets require Jev to repair them.
+- **Run locally with limits.** Use your own OpenRouter key, authentication fixtures, request limits, deadlines, and cost budget. Stop execution from the workbench or with Ctrl+C.
+
+## Quick start
+
+Requires **Node.js 22+** and one **OpenRouter API key**.
+
+### 1. Install from source
 
 ```sh
 git clone https://github.com/perixtar/jev-e2e.git
@@ -20,126 +46,105 @@ cd jev-e2e
 npm ci
 npm run build
 node dist/cli.js setup
+cp .env.example .env
 ```
 
-Copy `.env.example` to `.env` and set `OPENROUTER_API_KEY`. A separate OpenAI key is unnecessary. The defaults are `typesafe/jev-1.13` for Decisions and optional `openai/gpt-4.1-mini` for interpretation.
+### 2. Add your key
 
-Start the demo and workbench in separate terminals:
+Set this in your local `.env` file:
+
+```dotenv
+OPENROUTER_API_KEY=your_key_here
+```
+
+The defaults are `typesafe/jev-1.13` for control selection and optional `openai/gpt-4.1-mini` for interpreting prose. Both use the same OpenRouter key; a separate OpenAI key is unnecessary. Set `--planner off` to use explicit case templates. There is no silent model fallback.
+
+### 3. Run a website test
+
+```sh
+node dist/cli.js run --url https://playwright.dev/ \
+  --cases examples/public-site.cases --planner on --headed
+```
+
+This read-only example opens the getting-started guide and checks its URL. Discovery and prose interpretation make paid model calls. Runs default to a **$0.05 model budget** and a **60-second deadline per case**; see the [limits and exit codes](docs/USAGE.md).
+
+### 4. Try the workbench
+
+Start these in separate terminals:
 
 ```sh
 npm run demo
+```
+
+```sh
 npm run ui
 ```
 
-Visit the printed workbench URL, normally `http://127.0.0.1:4007`. The demo runs at `http://127.0.0.1:4177`; its command writes demo-only fixtures under `.jev-e2e/demo`. Review the plan, then run it. Choose a fresh project name for repeated create tests: a new browser context does not reset the app's data.
+Open the printed workbench URL, normally **http://127.0.0.1:4007**. Point it at the demo on **http://127.0.0.1:4177**, review a plan, run it, and inspect the evidence. The demo command creates demo-only fixtures under `.jev-e2e/demo`. Use a fresh project name for repeated create tests; a fresh browser context does not reset application data.
 
-## CLI
+## Write a test
 
-```sh
-# Read-only public-site example; no auth fixtures needed.
-node dist/cli.js run --url https://playwright.dev/ \
-  --cases examples/public-site.cases --planner on
-
-node dist/cli.js run --url http://127.0.0.1:4177 \
-  --cases examples/simple.cases --planner off \
-  --fixtures .jev-e2e/demo/fixtures.json
-
-node dist/cli.js plan --cases examples/simple.cases --planner off \
-  --out .jev-e2e/my-plan.json
-
-node dist/cli.js run --url http://127.0.0.1:4177 \
-  --plan .jev-e2e/my-plan.json --fixtures .jev-e2e/demo/fixtures.json
-
-# Use the successful run's printed directory for saved-flow replay.
-node dist/cli.js run --url http://127.0.0.1:4177 \
-  --replay .jev-e2e/runs/RUN_ID/plan.json \
-  --fixtures .jev-e2e/demo/fixtures.json
-```
-
-Successful replay reuses observed control descriptions and rechecks every assertion. Changed or ambiguous controls require repair by Jev; a complete unchanged flow can replay without a provider key. Failed/blocked flows are not cached as successful flows.
-
-`--planner on` accepts prose, for example:
+Save a case in a `.cases` file. With `--planner on`, describe the flow and give a concrete expectation:
 
 ```text
-Case: Create and persist
+Case: Create and persist a project
 Auth: @signed-in
 Add a new project named "Acme", save it, refresh, and verify it persisted.
 Expect: project named "Acme" exists exactly once after reload
 ```
 
-`--planner off` uses the same expectation with `Goal: Create project named "Acme"`. Supported inferred goals include sign-in with supplied fixtures, create/rename/archive projects, filter/search projects, set a native select, and check/uncheck a checkbox. For other flows, provide `Goal`, `Step`, and `Expect` lines:
+`Auth: @signed-in` references your own [local authentication fixture](docs/USAGE.md#credentials-and-app-state). For the included demo, run this explicit template without the prose planner:
 
-```text
-Case: Contact submission
-Goal: Send the supplied test message
-Step: Click "Contact"
-Step: Fill "Message" with "Hello from the test account"
-Step: Click "Send"
-Expect: text "Message sent" is visible
+```sh
+node dist/cli.js run --url http://127.0.0.1:4177 \
+  --cases examples/simple.cases --planner off \
+  --fixtures .jev-e2e/demo/fixtures.json --headed
 ```
 
-Step commands: `Click`, `Fill ... with`, `Select ... with`, `Check`, `Uncheck`, `Reload`, and `Wait for text`, with double-quoted targets and values or `@fixture` input values. They describe control purposes, never selectors or JavaScript. Each suite has 1–10 cases.
+The [case reference](docs/USAGE.md) covers supported steps, expectations, fixtures, saved plans, and replay. Expectations are checked after the required steps; use separate cases for intermediate outcomes.
 
-Supported expectations:
+## Live eBay benchmark
 
-| Requirement | Example |
+Measured **September 18, 2026**, through OpenRouter. We retained three attempts per model, rotated model order, and used fresh guest browser contexts. No retries, substituted models, or discarded failures.
+
+| Model | Completed-case median | API cost / completed case, median | PASS / attempts | Correct UI choices |
+| --- | ---: | ---: | ---: | ---: |
+| Jev 1.13 | 47.46 s | $0.006678 | 1/3 | 30/31 |
+| GPT-5.6 Luna | 61.99 s | $0.027704 | 2/3 | 32/32 |
+| Claude Sonnet 5 | 78.62 s | $0.406216 | 1/3 | 19/19 |
+
+**Jev was faster and cheaper among completed cases, and it missed one quantity-field choice on another attempt.** Three attempts were blocked by eBay availability, and one by a detached-frame bug in the benchmark observer. The verifier stopped the incorrect choice before executing it. Completed-case sample sizes are **1 / 2 / 1**; these small, unequal samples do not establish a general accuracy ranking. Site and runner blocks are separate from model mistakes.
+
+The video uses the first registered round for all three models, selected before the batch. Timers and costs follow actual measurement events. Its final scorecard shows all three attempts per model. [Read the protocol and every outcome](docs/benchmarks/ebay-2026-09-18.md) or inspect the [public result data](docs/benchmarks/ebay-2026-09-18.json).
+
+For product validation, see the separate [controlled-demo test results](TEST_RESULTS.md), including healthy, known-broken, and saved-flow replay runs. Those checks do not prove reliability on arbitrary websites.
+
+## How it works
+
+| Component | Responsibility |
 | --- | --- |
-| Exact visible/absent text | `text "Saved" is visible` / `text "Error" is absent` |
-| Exact entity count | `project named "Acme" exists exactly once` / `record "Acme" count is 2` |
-| Record-scoped text | `text "Archived" in record "Demo" is visible` |
-| Field value / selected label | `field "Theme" is "Dark"` |
-| Checkbox state | `checkbox "Enable notifications" is checked` |
-| Numeric field | `number in field "Quantity" equals 5` |
-| URL pathname | `url is "/projects"` |
+| Optional prose planner | Converts your case into semantic steps, input bindings, and explicit expectations. Saved plans need no new interpretation. |
+| Jev | Selects from observed controls and navigation choices using OpenRouter's native Decisions API. |
+| Playwright | Executes actions and checks expectations independently. |
+| CLI + local workbench | Share the runner, budgets, cancellation, saved plans, and evidence reports. |
 
-Append `after reload` when persistence must be verified. Record checks require semantic list, table, or article markup. Unsupported checks block with a reason. Expectations are checked after all required steps; use separate cases to test intermediate outcomes.
+Jev uses `POST /api/alpha/decisions`; the optional planner uses `POST /api/v1/chat/completions`. Both use standard `fetch`. Direct TypeSafe transport is not implemented. [Provider setup](OPENROUTER_SETUP.md) · [Technical plan](TECHNICAL_PLAN.md)
 
-Runs default to a 60-second case deadline, 30 actions, 100 provider requests, and $0.05 model budget. Change these with `--timeout`, `--max-actions`, `--max-requests`, and `--max-cost`. Workbench review and execution have separate budgets; displayed run costs exclude earlier plan-review costs. Estimates reserve capacity before each request; unknown billing outcomes use the reservation instead of claiming zero cost. `--allow-origin` explicitly permits an additional app origin. `--headed` shows execution; `--json` prints a machine-readable result. Ctrl+C stops owned execution.
+## Scope and privacy
 
-Exit codes: **0 PASS, 1 FAIL, 2 BLOCKED/configuration error, 130 canceled**. Reports contain expected and observed values, actions, reasons, timings, provider usage and resolved model IDs, masked screenshots, and the saved specification. They are stored privately under `.jev-e2e/runs`.
+The alpha supports common Chromium forms, buttons, links, native selects, checkboxes, authenticated fixtures, and async results. Native desktop/mobile apps, CAPTCHA, canvas, complex frames, payment-provider flows, and subjective visual judgments are outside this release. Hosted infrastructure is a later stage.
 
-## Credentials and app state
+API keys stay in the server process. Known fixture/auth values are redacted from observations and reports; input fields are masked in screenshots. Visible application text is sent to OpenRouter, and unrelated page content can remain in reports. Inspect evidence before sharing it. Reports stay under your local `.jev-e2e/runs`; raw trace recording is not implemented. No telemetry is required.
 
-Use a local fixtures JSON file rather than putting credentials in cases:
+## Help shape the project
 
-```json
-{
-  "inputs": {
-    "valid.email": { "env": "E2E_TEST_EMAIL" },
-    "valid.password": { "env": "E2E_TEST_PASSWORD" }
-  },
-  "auth": {
-    "signed-in": { "storageState": "../.auth/user.json" }
-  }
-}
-```
-
-Refer to these as `Input: Email = @valid.email`, `Input: Password = @valid.password`, or `Auth: @signed-in`. Auth paths resolve relative to the fixtures file. Each case gets a fresh Playwright context; app database reset remains the test owner's responsibility.
-
-Keys stay in the server process. Known fixture/auth values are redacted from model observations and reports; input fields are masked in screenshots. Visible application text is sent to OpenRouter for decisions, and unrelated application content can remain in reports. Inspect evidence before sharing it. Raw trace recording is not implemented.
-
-## Development and scope
+Try a flow on your website and [open an issue](https://github.com/perixtar/jev-e2e/issues/new) with a sanitized case, expected outcome, and what happened. Unsupported flows and reproducible failures are useful contributions. If the project helps you, give it a star.
 
 ```sh
 npm run check
 npm test
-
-# Opt-in paid checks; ordinary tests make no paid calls.
-npm run test:live -- --rounds 1 --budget 0.2
 ```
 
-The alpha targets common Chromium forms, buttons, links, native selects, checkboxes, authenticated fixtures, and async results. Native desktop/mobile apps, CAPTCHA, canvas, complex frames, payment-provider workflows, and subjective visual judgments are outside this release. The controlled demo benchmark does not establish reliability across arbitrary sites. Hosted infrastructure is a later stage.
+Ordinary tests use scripted provider responses and real Chromium, with no paid calls. The [contributing guide](CONTRIBUTING.md) covers development, opt-in paid checks, and review requirements.
 
-See [contributing](CONTRIBUTING.md) for checks, benchmark protocol, and PR review requirements.
-
-- [Technical plan](TECHNICAL_PLAN.md): architecture, model responsibilities, scope, and implementation sequence.
-- [Test plan](TEST_PLAN.md): release gates, benchmark cases, and verification protocol.
-- [UI design](UI_DESIGN.md): layout, palette, screen states, and accessibility.
-- [Research](RESEARCH.md): Jev's capabilities and the inspected open-source implementations.
-- [Live provider checks](LIVE_PROVIDER_CHECK.md): the actual Decisions and planner protocols through OpenRouter.
-
-`.env.example` documents current configuration. Change the optional planner vendor/model with `OPENROUTER_PLANNER_MODEL`; it must support strict JSON schema. There is no silent model fallback.
-
-Jev uses `POST /api/alpha/decisions`; the optional planner uses `POST /api/v1/chat/completions`. Both use standard `fetch` and one OpenRouter key. Direct TypeSafe transport is a research fallback and is not implemented. See [OpenRouter setup](OPENROUTER_SETUP.md).
-
-MIT licensed. No telemetry or hosted infrastructure is required.
+[Test plan](TEST_PLAN.md) · [UI design](UI_DESIGN.md) · [Research](RESEARCH.md) · [Live provider checks](LIVE_PROVIDER_CHECK.md) · [MIT license](LICENSE)
