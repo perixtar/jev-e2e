@@ -1,0 +1,57 @@
+{
+  "name": "jev-e2e",
+  "version": "0.1.0-alpha.1",
+  "description": "Test web apps from natural-language cases with Jev, Playwright, and checked evidence.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "jev-e2e": "dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "public",
+    "examples",
+    "README.md",
+    "CONTRIBUTING.md",
+    "TEST_RESULTS.md",
+    "TEST_PLAN.md",
+    "TECHNICAL_PLAN.md",
+    "UI_DESIGN.md",
+    ".env.example",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "check": "tsc --noEmit",
+    "test": "npm run build && node --test test/*.test.mjs",
+    "test:live": "npm run build && node scripts/evaluate.mjs",
+    "ui": "node dist/cli.js ui",
+    "demo": "node dist/cli.js demo",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "playwright": "1.63.0",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.3",
+    "typescript": "7.0.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/perixtar/jev-e2e.git"
+  },
+  "bugs": {
+    "url": "https://github.com/perixtar/jev-e2e/issues"
+  },
+  "homepage": "https://github.com/perixtar/jev-e2e#readme"
+}

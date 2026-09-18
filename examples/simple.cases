@@ -1,0 +1,4 @@
+Case: Create and persist a project
+Auth: @signed-in
+Goal: Create project named "Acme"
+Expect: project named "Acme" exists exactly once after reload

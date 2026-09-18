@@ -1,0 +1,3 @@
+Case: Read the getting-started guide
+Open the "Get started" guide from the Playwright homepage and check that the introduction page loads.
+Expect: url is "/docs/intro"

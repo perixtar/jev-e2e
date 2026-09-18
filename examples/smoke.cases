@@ -1,0 +1,58 @@
+Case: Valid sign in
+Goal: Sign in with valid credentials
+Input: Email = @valid.email
+Input: Password = @valid.password
+Expect: text "Welcome back" is visible
+Expect: url is "/projects"
+
+Case: Invalid password
+Goal: Sign in with an invalid password
+Input: Email = @valid.email
+Input: Password = @invalid.password
+Expect: text "Invalid credentials" is visible
+Expect: text "Welcome back" is absent
+
+Case: Create and persist
+Auth: @signed-in
+Goal: Create project named "Quickstart"
+Expect: project named "Quickstart" exists exactly once after reload
+
+Case: Rename
+Auth: @signed-in
+Goal: Rename project "Demo" to "Renamed Demo"
+Expect: project named "Renamed Demo" exists exactly once after reload
+Expect: project named "Demo" exists exactly zero times
+
+Case: Archive
+Auth: @signed-in
+Goal: Archive project "Renamed Demo"
+Expect: text "Archived" in record "Renamed Demo" is visible
+
+Case: Filter
+Auth: @signed-in
+Goal: Filter projects to Archived
+Expect: project named "Quickstart" exists exactly zero times
+Expect: project named "Legacy" exists exactly once
+
+Case: Persist select
+Auth: @signed-in
+Goal: Set "Theme" to "Dark"
+Expect: field "Theme" is "Dark" after reload
+
+Case: Persist checkbox
+Auth: @signed-in
+Goal: Check "Enable notifications"
+Expect: checkbox "Enable notifications" is checked after reload
+
+Case: Required field
+Auth: @signed-in
+Goal: Create a project with an empty name
+Input: Project name = ""
+Expect: text "Project name is required" is visible
+Expect: project named "Untitled" exists exactly zero times
+
+Case: Asynchronous search
+Auth: @signed-in
+Goal: Search projects for "Quickstart"
+Expect: project named "Quickstart" exists exactly once
+Expect: project named "Legacy" exists exactly zero times
