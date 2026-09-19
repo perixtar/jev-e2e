@@ -87,9 +87,11 @@ export function unsupportedNativeMutation(text: string): boolean {
   return /\b(?:buy(?:\s+now)?|checkout|check\s+out|place\s+(?:an\s+)?order|order\s+now|(?:confirm|submit|finalize|complete)\s+(?:the\s+)?(?:order|booking|reservation)|pay(?:ment)?|purchase|transfer|wire|send|donate|tip|subscribe|book\s+now|delete\s+(?:(?:my|the)\s+)?account|message\s+(?:seller|buyer|host|guest|support|user)|(?:publish|post|submit)\s+(?:a\s+|the\s+)?(?:message|comment|review|reply|post))\b/i.test(text);
 }
 
-export function sensitiveInputTarget(text: string): boolean {
-  return /\b(?:password|passcode|pass\s*phrase|pin|otp|one[- ]time(?:\s+(?:password|code))?|verification\s+code|security\s+code|credit\s+card|card\s+number|cvv|cvc|social\s+security(?:\s+number)?|ssn|token|secret|api.?key|e-?mail|user\s*name)\b/i.test(text);
-}
+// Keep the field vocabulary shared by preflight, saved-plan validation, and
+// runtime redaction. A credential may have an ordinary-looking short value.
+export const privateInputFieldSource = String.raw`(?:password|passcode|pass\s*phrase|pin|otp|totp|one[- ]time(?:\s+(?:password|code))?|verification[\s-]+code|(?:recovery|backup|seed|security|authenticator|access|mfa|2[- ]?fa|(?:two|2)[- ]factor|sms|login|sign[- ]?in|authentication|auth)[\s-]+(?:code|key|phrase|answer|token)s?|security[\s-]+question(?:[\s-]+answer)?s?|credit\s+card|card\s+number|cvv|cvc|social\s+security(?:\s+number)?|ssn|code|token|secret|api.?key|e-?mail|user\s*name)`;
+const privateInputField = new RegExp(`\\b${privateInputFieldSource}\\b`, 'i');
+export function sensitiveInputTarget(text: string): boolean { return privateInputField.test(text); }
 
 export function validateSuite(input: unknown): Suite {
   const parsed = SuiteSchema.safeParse(input);
@@ -111,6 +113,7 @@ export function validateSuite(input: unknown): Suite {
     }
     if (test.auth && !safeFixtureName(test.auth)) throw new BlockedError('Fixture names cannot use reserved object-property names.');
     for (const assertion of test.assertions) {
+      if (parsed.data.version === 2 && ['value', 'number'].includes(assertion.kind) && sensitiveInputTarget(assertion.target?.text ?? '')) throw new BlockedError('Do not compare private input values in expectations. Check a non-secret completion state instead.');
       if (parsed.data.version === 1 && (assertion.afterStep !== undefined || assertion.target?.by === 'id')) throw new BlockedError('Native milestones/identifiers require a version-2 plan.');
       if (parsed.data.version === 2 && assertion.kind === 'url') throw new BlockedError('Native apps do not expose a browser URL. Check an observed screen label instead.');
       if (assertion.afterStep !== undefined && assertion.afterStep >= test.steps.length) throw new BlockedError('Milestone points outside the required action sequence.');

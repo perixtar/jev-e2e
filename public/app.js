@@ -24,7 +24,7 @@ async function start(kind){try{controls(true);$('stop').disabled=true;$('log').h
 $('example').onclick=()=>{clear();$('cases').value=$('platform').value==='web'?example:mobileExample;};$('cases').value=example;
 for(const id of ['url','cases','planner','fixtures','app','device','record'])$(id).addEventListener('input',clear);
 $('saved').addEventListener('input',()=>{if(!busy){reviewed=null;$('run').disabled=true;status('Review saved plan');}});
-$('review').onclick=()=>start('plan');$('run').onclick=()=>start('run');$('stop').onclick=async()=>{try{await post('/api/cancel',{id:jobId});status('Stopping…');}catch(error){status(error.message);}};
+$('review').onclick=()=>start('plan');$('run').onclick=()=>start('run');$('stop').onclick=async()=>{try{await post('/api/cancel',{id:jobId});if(busy)status('Stopping…');}catch(error){if(busy)status(error.message);}};
 $('save').onclick=async()=>{try{const result=await post('/api/save',{id:jobId});savedPath=result.path;$('saved').value=savedPath;status('Saved locally');$('log').hidden=false;$('log').textContent+='Saved: '+savedPath+'\n';}catch(error){status(error.message);}};
 fetch('/api/session').then(response=>response.json()).then(session=>{token=session.token;$('provider').textContent=session.configured?'● OpenRouter configured':'○ Set OPENROUTER_API_KEY';}).catch(()=>{status('Local server unavailable');});
 

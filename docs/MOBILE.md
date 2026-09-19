@@ -47,6 +47,7 @@ jev-e2e run --plan reviewed.json --device EXACT_ID
 ```
 
 Keep each `Goal:` on one physical line. A wrapped continuation, including an unprefixed action or credential, blocks before any provider call; use explicit `Step:` lines when a flow is long.
+Free-form actions need their supported verb each time: `tap "Increase", then tap "Increase"` means two taps. A bare repeated label such as `tap "Increase", "Increase"` cannot express a second action safely. Use two `Step:` lines if repetition matters.
 
 For explicit steps, use `--planner off`. Explicit cases and saved plans need no prose-planner call. An unchanged saved flow can run with zero model calls; a stale target uses Jev for repair. Live discovery uses Jev through `OPENROUTER_API_KEY`; a separate OpenAI key is unnecessary.
 
@@ -68,6 +69,7 @@ Expect: text "Quantity: 2" is visible
 ```
 
 Each Expect is checked after the preceding Step, before a later screen hides the evidence. A failed milestone stops that case. Other cases remain independent; the runner never turns navigation success into a passing verdict.
+With explicit cases, the `Step:` lines define the required actions and `Goal:` summarizes them. If the Goal also names a supported `Tap`/`Fill`/`Check` action, that action must appear in order among the Steps. An extra imperative that cannot be bound safely blocks; write it as an explicit supported Step instead. The compiler cannot infer an unlisted action from a broad Goal summary.
 
 | Step | Meaning |
 | --- | --- |
@@ -103,7 +105,8 @@ On Android, clearing a controlled text field can replace its native input connec
 }
 ```
 
-Keep actual credentials in local environment variables. Fixture values never belong in cases or saved plans. Native tests sign in through the UI; browser storageState cannot preload native authentication.
+Keep actual credentials in local environment variables. Fixture values never belong in cases or saved plans. Even a field labeled only `Code` requires a fixture: it may be a one-time password. Field-name checks cannot recognize every app-specific secret label, so always use a fixture for credentials and private values. Native tests sign in through the UI; browser storageState cannot preload native authentication.
+Do not assert the literal value of a credential field, even a short code; check a non-secret success/error state instead.
 
 Prepare your app's baseline yourself before each independent case. Opening or relaunching preserves data; uninstalling an iOS app does not guarantee Keychain reset. The CLI does not run arbitrary reset shell commands or clear user data automatically. Use dedicated test devices and test accounts.
 
@@ -165,3 +168,4 @@ node scripts/evaluate-mobile.mjs --live --platform both \
 It verifies that each trial consumed its intended baseline/fault configuration. Healthy execution, bug detection, and replay are reported separately; BLOCKED is never counted as detected failure.
 
 Current scope: local virtual devices and accessible native/React Native controls. Physical phones, hosted devices, complex WebViews, arbitrary canvas controls, subjective appearance, biometrics, and payments require separate validation.
+Free-form goals fail closed when an action cannot be bound to the supported verbs, including some read-only phrases with words such as “confirm” or “filter.” In that case, put concrete actions in `Step:` lines and keep the `Goal:` a short summary.

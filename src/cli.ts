@@ -62,6 +62,7 @@ Mobile case example (--planner off):
   Expect: text "Desk Lamp" is visible
 
 Put each Expect after the action it checks. Credentials: Fill "Password" with @password.
+Step lines are the action contract; Goal is a summary. Named Goal actions must match Steps.
 Mobile steps: Tap, Fill, Check/Uncheck, Scroll down/up/left/right, Back,
 Dismiss keyboard, Wait for text, Relaunch. Relaunch preserves app data.
 Mobile runs never reset an app automatically; supply your test baseline yourself.

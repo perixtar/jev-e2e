@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFile,writeFile,mkdir,mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {parseNative,compileNative,authoredNativeSteps} from '../dist/mobile-plan.js';
+import {parseNative,compileNative,authoredNativeSteps,nativeExpectation} from '../dist/mobile-plan.js';
 import {provider} from './helpers.mjs';
 import {MobileDriver,nativeCheck,normalizeNative,nativeVersions} from '../dist/mobile.js';
 import {selectDevice,nativeToolEnvironment} from '../dist/device.js';
@@ -57,6 +57,80 @@ test('native metadata subprocesses receive only toolchain variables and obey can
  const env=nativeToolEnvironment({PATH:'/bin',HOME:'/home/test',ANDROID_HOME:'/sdk',OPENROUTER_API_KEY:'secret',E2E_TEST_EMAIL:'private@example.test',CUSTOM_LOGIN_ID:'arbitrary-fixture-secret',PASSWORD:'private'});
  assert.deepEqual(env,{PATH:'/bin',HOME:'/home/test',ANDROID_HOME:'/sdk'});assert.ok(!JSON.stringify(env).includes('secret'));assert.ok(!JSON.stringify(env).includes('private'));
  await assert.rejects(nativeVersions({platform:'ios',app,device:'sim',baseline:'preserve'},AbortSignal.abort()),error=>error?.name==='AbortError');
+});
+test('recovery and multi-factor codes require fixtures before any provider or report sees a literal',async()=>{
+  let requests=0;const remote=provider({fetchImpl:async()=>{requests++;throw Error('Private source reached provider');}}),noModel={stats:{plannerRequests:0},fetchImpl:()=>{throw Error('Private source reached provider');}};
+  for(const target of ['Recovery code','Recovery-code','Recovery phrase','Backup code','Backup-code','Seed phrase','Security answer','Security question answer','Authenticator code','Access code','MFA code','2FA code','two-factor code','2-factor code','SMS code','TOTP','Code']){
+    const source=`Case: Private input\nGoal: Sign in safely\nStep: Fill "${target}" with "123456"\nExpect: text "Welcome" is visible`;
+    await assert.rejects(compileNative(source,'ios','off',{inputs:{},auth:{}},noModel,new AbortController().signal,[]),/fixture references for private inputs/);
+    assert.throws(()=>validateSuite({version:2,platform:'ios',cases:[{name:'Private input',source,goal:'Sign in safely',auth:null,steps:[{action:'fill',target,value:'123456',fixture:null}],assertions:[{...assertion('visible','Welcome',true),afterStep:0}],blockedReason:null}]}),/fixture reference/);
+  }
+  for(const goal of ['Tap "Verify" with recovery code 123456.','Tap "Verify" with recovery-code 123456.','Enter my recovery code to sign in.','Fill "Backup code" with "123456", then tap "Verify".','Enter "123456" into "Authenticator code", then tap "Verify".','Tap "Verify" with recovery phrase correct-horse.','Use correct-horse as the seed phrase.','Use correct-horse as security answer.','Enter correct-horse into "Recovery phrase", then tap "Verify".','Tap "Verify" with two-factor code 123456.','Tap "Verify" with 2-factor code 123456.','Tap "Verify" with SMS code 123456.','Tap "Verify" with security question answer canaryval.','Tap "Verify" with code 123456.'])
+    await assert.rejects(compileNative(`Case: Private prose\nGoal: ${goal}\nExpect: text "Welcome" is visible`,'ios','on',{inputs:{},auth:{}},remote,new AbortController().signal,[]),/fixture references for private inputs/);
+  for(const title of ['Recovery phrase correct-horse','Seed phrase correct-horse','Recovery-code-123456'])
+    await assert.rejects(compileNative(`Case: ${title}\nGoal: Inspect status\nExpect: text "Welcome" is visible`,'ios','on',{inputs:{},auth:{}},remote,new AbortController().signal,[]),/fixture references for private inputs/);
+  assert.equal(requests,0);
+  const safe=await compileNative('Case: Recovery code test\nGoal: Fill "Recovery code" with @recovery, then tap "Verify".\nStep: Fill "Recovery code" with @recovery\nStep: Tap "Verify"\nExpect: text "Welcome" is visible','ios','off',{inputs:{recovery:{value:'123456'}},auth:{}},noModel,new AbortController().signal,['123456']);
+  assert.equal(safe.cases[0].blockedReason,null);assert.equal(safe.cases[0].steps[0].fixture,'recovery');assert.ok(!JSON.stringify(safe).includes('123456'));
+  const phrase=await compileNative('Case: Recovery-code test\nGoal: Fill "Recovery phrase" with @recovery, then tap "Verify".\nStep: Fill "Recovery phrase" with @recovery\nStep: Tap "Verify"\nExpect: text "Welcome" is visible','ios','off',{inputs:{recovery:{value:'correct-horse'}},auth:{}},noModel,new AbortController().signal,['correct-horse']);
+  assert.equal(phrase.cases[0].blockedReason,null);assert.ok(!JSON.stringify(phrase).includes('correct-horse'));
+  for(const title of ['2-factor code flow','two-factor code flow','Sign-in code flow']){
+    const described=await compileNative(`Case: ${title}\nGoal: Sign in safely\nStep: Fill "2-factor code" with @recovery\nStep: Tap "Verify"\nExpect: text "Welcome" is visible`,'ios','off',{inputs:{recovery:{value:'123456'}},auth:{}},noModel,new AbortController().signal,['123456']);
+    assert.equal(described.cases[0].blockedReason,null,title);
+  }
+  const code=await compileNative('Case: Code entry\nGoal: Fill "Code" with @otp, then tap "Verify".\nStep: Fill "Code" with @otp\nStep: Tap "Verify"\nExpect: text "Welcome" is visible','ios','off',{inputs:{otp:{value:'123456'}},auth:{}},noModel,new AbortController().signal,['123456']);
+  assert.equal(code.cases[0].blockedReason,null);
+  for(const expectation of ['value of id "Code" equals "123"','number in id "PIN" equals 123','value of id "OTP" equals "abc"','value of id "Recovery code" equals "123"','field "Security answer" equals "hi"']){
+    const source=`Case: Private comparison\nGoal: Tap "Verify"\nStep: Tap "Verify"\nExpect: ${expectation}`;
+    await assert.rejects(compileNative(source,'ios','on',{inputs:{},auth:{}},remote,new AbortController().signal,[]),/fixture references for private inputs/);
+    await assert.rejects(compileNative(source,'ios','off',{inputs:{},auth:{}},noModel,new AbortController().signal,[]),/fixture references for private inputs/);
+    const check=nativeExpectation(expectation);
+    assert.throws(()=>validateSuite({version:2,platform:'ios',cases:[{name:'Private comparison',source,goal:'Tap "Verify"',auth:null,steps:[{action:'click',target:'Verify',value:null,fixture:null}],assertions:[{...check,afterStep:0}],blockedReason:null}]}),/private input values/);
+  }
+});
+test('freeform native goals cannot silently omit an empty or reset action',async()=>{
+  let requests=0;const source=goal=>`Case: Empty basket\nGoal: ${goal}\nExpect: text "Your cart is empty" is visible`;
+  const remote=provider({fetchImpl:async()=>{requests++;throw Error('Unbound action reached provider');}});
+  for(const goal of ['Tap "Cart" and empty the basket.','Tap "Cart" then empty your basket.','Tap "Cart" and empty out the shopping cart.','Tap "Cart" and wipe the items.','Tap "Cart" and discard the contents.','Tap "Cart" and reset the app.','Tap "Settings" and turn on notifications.','Tap "Settings" and turn notifications on.','Tap "Settings" and activate notifications.','Tap "Settings" and deactivate notifications.','Tap "Settings" and configure notifications.','Tap "Settings" and sign out.','Tap "Settings" and log out.','Tap "Settings" and logout.','Tap "Settings" and disconnect the account.','Tap "Settings" and export the report.','Tap "Settings" and register an account.','Tap "Settings" and unlink the account.','Tap "Settings"; unlink the account.','Tap "Settings", unlink the account.','Tap "Settings". Unlink the account.','Tap "Settings" — unlink the account.','Tap "Settings" / unlink the account.','Tap "Settings" & unlink the account.','Tap "Settings" → unlink the account.','Tap "Settings" followed by unlink the account.','Tap "Settings" plus unlink the account.','Tap "Settings" after you unlink the account.','Tap "Settings" and then unlink the account.','Tap "Settings" and switch.','Unlink the account and tap "Settings".','Unlink the account; tap "Settings".'])
+    await assert.rejects(compileNative(source(goal),'ios','on',{inputs:{},auth:{}},remote,new AbortController().signal,[]),/freeform native action could not be bound safely/);
+  assert.equal(requests,0);
+  for(const mode of ['on','off']){
+    await assert.rejects(compileNative('Case: Empty basket\nGoal: Tap "Cart" then empty your basket.\nStep: Tap "Cart"\nExpect: text "Your cart is empty" is visible','ios',mode,{inputs:{},auth:{}},remote,new AbortController().signal,[]),/Goal action could not be matched safely/);
+    await assert.rejects(compileNative('Case: Notifications\nGoal: Tap "Settings" then turn on notifications.\nStep: Tap "Settings"\nExpect: text "Notifications on" is visible','ios',mode,{inputs:{},auth:{}},remote,new AbortController().signal,[]),/Goal action could not be matched safely/);
+    await assert.rejects(compileNative('Case: Sign out\nGoal: Tap "Settings" and sign out.\nStep: Tap "Settings"\nExpect: text "Signed out" is visible','ios',mode,{inputs:{},auth:{}},remote,new AbortController().signal,[]),/Goal action could not be matched safely/);
+    await assert.rejects(compileNative('Case: Unlink\nGoal: Tap "Settings" and unlink the account.\nStep: Tap "Settings"\nExpect: text "Account removed" is visible','ios',mode,{inputs:{},auth:{}},remote,new AbortController().signal,[]),/Goal action could not be matched safely/);
+    await assert.rejects(compileNative('Case: Unlink\nGoal: Tap "Settings"; unlink the account.\nStep: Tap "Settings"\nExpect: text "Account removed" is visible','ios',mode,{inputs:{},auth:{}},remote,new AbortController().signal,[]),/Goal action could not be matched safely/);
+    await assert.rejects(compileNative('Case: Unlink\nGoal: Tap "Settings" → unlink the account.\nStep: Tap "Settings"\nExpect: text "Account removed" is visible','ios',mode,{inputs:{},auth:{}},remote,new AbortController().signal,[]),/Goal action could not be matched safely/);
+    await assert.rejects(compileNative('Case: Missing action\nGoal: Tap "Cart", then tap "Remove all".\nStep: Tap "Cart"\nExpect: text "Your cart is empty" is visible','ios',mode,{inputs:{},auth:{}},remote,new AbortController().signal,[]),/Goal action is missing or out of order/);
+  }
+  assert.equal(requests,0);
+  const ordinary=source('Tap "Cart" and verify the cart is empty.');
+  const plan={version:2,platform:'ios',cases:[{name:'Empty basket',source:ordinary,goal:'Tap "Cart" and verify the cart is empty.',auth:null,steps:[{action:'click',target:'Cart',value:null,fixture:null}],assertions:[{...assertion('visible','Your cart is empty',true),afterStep:0}],blockedReason:null}]};
+  const safe=await compileNative(ordinary,'ios','on',{inputs:{},auth:{}},provider({fetchImpl:async()=>{requests++;return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(plan)}}],usage:{cost:0}});}}),new AbortController().signal,[]);
+  assert.deepEqual(safe,plan);assert.equal(requests,1);
+  const explicit=await compileNative('Case: Empty basket\nGoal: Tap "Cart" and verify the cart is empty.\nStep: Tap "Cart"\nExpect: text "Your cart is empty" is visible','ios','off',{inputs:{},auth:{}},remote,new AbortController().signal,[]);
+  assert.equal(explicit.cases[0].blockedReason,null);assert.equal(requests,1);
+});
+test('the 20 published mobile language goals pass the freeform preflight on both platforms',async()=>{
+  const goals=[
+    'Tap "Catalog".','Tap "Settings" to inspect the preferences.','Replace "Search products" with "lamp", then dismiss the keyboard.',
+    'Enable the "Notifications" switch.','Disable the "Notifications" switch.','Scroll down once.','Scroll up once.','Go back once.',
+    'Dismiss the keyboard.','Relaunch the app, keeping its data.','Wait for the exact text "Ready" to appear.',
+    'Tap "Open Desk Lamp", then tap "Add to cart".','Tap "Increase Desk Lamp quantity".','Tap "Remove Desk Lamp".',
+    'Replace "Search products" with "café ☕".','Replace "Search products" with "Lamp - 2.0".',
+    'Fill "Email" using @email, fill "Password" using @password, then tap "Sign in".',
+    'Fill "Email" using @email, fill "Password" using @invalidPassword, then tap "Sign in" with those invalid credentials.',
+    'Tap "Open Desk Lamp", tap "Add to cart", relaunch the app, then tap "Cart".','Replace "Search products" with "".',
+  ];
+  const fixtures={inputs:{email:{value:'local'},password:{value:'local'},invalidPassword:{value:'local'}},auth:{}};
+  for(const platform of ['ios','android'])for(const goal of goals){
+    const source=`Case: Language flow\nGoal: ${goal}\nExpect: text "Ready" is visible`,steps=authoredNativeSteps(source);
+    assert.ok(steps.length,goal);
+    const expected={version:2,platform,cases:[{name:'Language flow',source,goal,auth:null,steps,assertions:[{...nativeExpectation('text "Ready" is visible'),afterStep:steps.length-1}],blockedReason:null}]};
+    let requests=0;
+    const result=await compileNative(source,platform,'on',fixtures,provider({fetchImpl:async()=>{requests++;return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(expected)}}],usage:{cost:0}});}}),new AbortController().signal,[]);
+    assert.equal(requests,1,goal);assert.deepEqual(result,expected,goal);
+  }
 });
 test('an internal device command timeout cannot dispatch on a replacement worker during cleanup',async()=>{
  const connection=new DeviceConnection('ios'),worker=new EventEmitter();let kills=0,commands=[];
@@ -194,6 +268,9 @@ test('rejected private mobile prose is redacted from every persisted report arti
     const negative=await runSuite({platform:'ios',app:'dev.never.opened',device:'none',casesText:`Case: Private negative ${secret}\nGoal: Never tap "Delete account". Use ${secret} as password.\nExpect: text "Welcome" is visible`,planner:'on',outputDirectory:directory,fetchImpl:async()=>{requests++;throw Error('Provider must not be called');}});
     assert.equal(negative.verdict,'BLOCKED');assert.equal(requests,0);assert.equal(negative.plan.cases[0].source,'[PRIVATE INPUT REDACTED]');assert.ok(!JSON.stringify(negative).includes(secret));
     for(const name of ['report.json','plan.json','report.html'])assert.ok(!(await readFile(join(directory,name),'utf8')).includes(secret),name);
+    const recovery=await runSuite({platform:'ios',app:'dev.never.opened',device:'none',casesText:'Case: Recovery code\nGoal: Tap "Verify" with recovery code 491827.\nExpect: text "Welcome" is visible',planner:'on',outputDirectory:directory,fetchImpl:async()=>{requests++;throw Error('Provider must not be called');}});
+    assert.equal(recovery.verdict,'BLOCKED');assert.equal(requests,0);assert.equal(recovery.plan.cases[0].source,'[PRIVATE INPUT REDACTED]');
+    for(const name of ['report.json','plan.json','report.html'])assert.ok(!(await readFile(join(directory,name),'utf8')).includes('491827'),name);
   }finally{await rm(directory,{recursive:true,force:true});}
 });
 test('Android typing requires one focused input from the same app and exact geometry',()=>{
