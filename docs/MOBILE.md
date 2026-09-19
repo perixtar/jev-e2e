@@ -86,6 +86,7 @@ With explicit cases, the `Step:` lines define the required actions and `Goal:` s
 Relaunch is different from browser Reload. Mobile plans reject web Reload/Select and browser Auth/storageState. Native menus should use their observed option buttons.
 
 Supported expectations: exact text visibility/absence, readable field values, strict numeric values, switch state, identifiers (`Expect: id "cart-screen" is visible`), and counts with a complete visible accessibility tree. Semantic record checks need actual accessible record containers. Scroll-hidden or truncated trees cannot prove absence or whole-collection counts. Missing/ambiguous evidence is BLOCKED; an observed contradiction is FAIL.
+The pinned iOS SDK can omit its optional quality verdict. In that case the runner requires two fresh, matching app-owned XCTest trees with explicit nontruncation and complete visibility metadata. A sparse tree, missing completeness metadata, or a warning about hierarchy limits blocks the check. Custom-rendered content that never appears in accessibility remains outside this proof.
 
 Use `Expect: number in id "cart-total" equals 72` when an app exposes a stable accessibility identifier. Native backends can expose different labels for the same value; an identifier avoids guessing or matching a nearby number.
 For switches, use `Expect: switch id "notifications" is checked` (or `unchecked`) when the state is exposed under an identifier.

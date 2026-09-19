@@ -161,6 +161,63 @@ test('native verification distinguishes an actual mismatch from incomplete or am
   assert.equal(nativeCheck(snapshot([node(0,'StaticText','Email',{value:'Email'})]),assertion('visible','Email',true,'label')).passed,false);
   assert.equal(nativeCheck(snapshot([node(0,'android.widget.EditText','Search',{value:'Search',hintShowing:true})]),assertion('value','Search','','label')).passed,true);
 });
+test('iOS SDK quality omissions require two fresh complete, matching app trees before negative checks',async()=>{
+  const nodes=[node(0,'Application','Example'),node(1,'StaticText','Desk Lamp',{parentIndex:0})];
+  const ios=(elements=nodes,generation=7)=>({...snapshot(elements),snapshotQuality:undefined,refsGeneration:generation,
+    warnings:['iOS snapshot acquisition does not provide hittability evidence; regular snapshots omit unverified hittability while raw snapshots preserve supplied facts.'],
+    snapshotDiagnostics:{stats:{backends:{xctest:1}}}});
+  const first=ios(nodes,7),second=ios(nodes,8);
+  assert.throws(()=>normalizeNative(first,app,[]),BlockedError);
+  assert.throws(()=>nativeCheck(first,assertion('absent','AirPods',false)),BlockedError);
+  const driver=new MobileDriver({platform:'ios',app,device:'sim',baseline:'preserve'},[]);driver.ready=true;
+  let reads=0;driver.connection.call=async command=>{assert.equal(command,'snapshot');return ++reads===1?first:second;};
+  const observed=await driver.observe(AbortSignal.timeout(1000));
+  assert.equal(reads,2);assert.equal(observed.native,second);
+  assert.equal(nativeCheck(observed.native,assertion('absent','AirPods',false)).passed,true);
+  assert.equal(nativeCheck(observed.native,assertion('count','Desk Lamp',1)).passed,true);
+  await driver.close();
+  const invalid=[
+    ios([nodes[0]],7),{...ios(),truncated:true},
+    {...ios(),visibility:{...ios().visibility,partial:true}},
+    {...ios(),visibility:{...ios().visibility,totalNodeCount:1}},
+    {...ios(),visibility:{...ios().visibility,reasons:['unknown region']}},
+    {...ios(),warnings:['iOS snapshot acquisition does not report hierarchy completeness; provider-side depth or child limits may omit nodes.']},
+    {...ios(),snapshotQuality:{state:'sparse',backend:'xctest'}},
+    {...ios(),snapshotDiagnostics:undefined},
+    ios([...nodes,node(2,'ScrollView','List',{hiddenContentBelow:true,parentIndex:0})]),
+  ];
+  for(const raw of invalid){
+    const blocked=new MobileDriver({platform:'ios',app,device:'sim',baseline:'preserve'},[]);blocked.ready=true;
+    blocked.connection.call=async()=>({...raw,refsGeneration:8});
+    await assert.rejects(blocked.observe(AbortSignal.timeout(280)));
+    await blocked.close();
+    assert.throws(()=>nativeCheck(raw,assertion('absent','AirPods',false)),BlockedError);
+  }
+  for(const variant of ['changed-tree','same-generation','wrong-app']){
+    const blocked=new MobileDriver({platform:'ios',app,device:'sim',baseline:'preserve'},[]);blocked.ready=true;let captures=0;
+    blocked.connection.call=async()=>{captures++;return captures%2===1?first:variant==='changed-tree'?ios([nodes[0],node(1,'StaticText','Other',{parentIndex:0})],8):variant==='same-generation'?ios(nodes,7):{...second,appBundleId:'dev.other.app'};};
+    await assert.rejects(blocked.observe(AbortSignal.timeout(300)));
+    await blocked.close();
+  }
+});
+test('iOS corroboration discards private pixels appearing in the second capture',async()=>{
+  const directory=await mkdtemp(join(tmpdir(),'jev-native-private-corrob-'));
+  try{
+    const safe=[node(0,'Application','Example'),node(1,'Button','Done',{parentIndex:0})];
+    const privateNodes=[node(0,'Application','Example'),node(1,'TextField','Email',{parentIndex:0})];
+    const ios=(nodes,generation)=>({...snapshot(nodes),snapshotQuality:undefined,refsGeneration:generation,warnings:['iOS snapshot acquisition does not provide hittability evidence; regular snapshots omit unverified hittability while raw snapshots preserve supplied facts.'],snapshotDiagnostics:{stats:{backends:{xctest:1}}}});
+    const path=join(directory,'private.png'),driver=new MobileDriver({platform:'ios',app,device:'sim',baseline:'preserve'},[]);driver.ready=true;
+    let snapshots=0,pixels=0;
+    driver.connection.call=async(command)=>{
+      if(command==='snapshot')return ++snapshots<=2?ios(safe,snapshots):snapshots===3?ios(privateNodes,snapshots):ios(safe,snapshots);
+      if(command==='screenshot'){pixels++;await writeFile(path,'unredacted pixels');return{path,identifiers:{appBundleId:app,deviceId:'sim'}};}
+      throw Error(command);
+    };
+    await assert.rejects(driver.screenshot(path,AbortSignal.timeout(2500)),/ownership could not be confirmed/);
+    assert.equal(pixels,1);assert.equal(snapshots,3);await assert.rejects(readFile(path),/ENOENT/);
+    await driver.close();
+  }finally{await rm(directory,{recursive:true,force:true});}
+});
 test('native switch actions cannot succeed when the state does not change',async()=>{
  const state=snapshot([node(0,'Application','Example'),node(1,'Switch','Notifications',{identifier:'notifications',checked:false,parentIndex:0})]),d=new MobileDriver({platform:'ios',app,device:'sim',baseline:'preserve'},[]);d.ready=true;let presses=0;
  d.connection.call=async command=>{if(command==='snapshot')return state;if(command==='press'){presses++;return{verification:'confirmed'};}throw Error(command);};

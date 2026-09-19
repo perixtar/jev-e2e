@@ -24,6 +24,26 @@ const selected = (node: Node): boolean | null => {
 };
 const visible = (node: Node) => node.visibleToUser !== false && node.hittable !== false && !node.interactionBlocked && Boolean(node.rect && node.rect.width > 0 && node.rect.height > 0);
 const isSystemSurface = (raw: NativeSnapshot) => raw.systemSurfaceOnly === true || raw.androidSnapshot?.systemSurfaceOnly === true || typeof raw.iosSystemSurfaceBundleId === 'string' && raw.iosSystemSurfaceBundleId.length > 0;
+const corroboratedSnapshots = new WeakSet<NativeSnapshot>();
+const harmlessIosWarning = 'iOS snapshot acquisition does not provide hittability evidence; regular snapshots omit unverified hittability while raw snapshots preserve supplied facts.';
+function corroboratableIosSnapshot(raw: NativeSnapshot, app: string): boolean {
+  return raw.snapshotQuality === undefined && raw.appBundleId === app && !isSystemSurface(raw)
+    && raw.nodes.length > 1 && raw.nodes.some(node => node.index !== 0 && visible(node))
+    && raw.truncated === false && raw.visibility?.partial === false
+    && raw.visibility.visibleNodeCount === raw.nodes.length && raw.visibility.totalNodeCount === raw.nodes.length
+    && Array.isArray(raw.visibility.reasons) && raw.visibility.reasons.length === 0
+    && !raw.nodes.some(node => node.hiddenContentAbove || node.hiddenContentBelow)
+    && Array.isArray(raw.warnings) && raw.warnings.every(warning => warning === harmlessIosWarning)
+    && Number(raw.snapshotDiagnostics?.stats?.backends?.xctest) > 0
+    && Number.isSafeInteger(raw.refsGeneration);
+}
+function trustedQuality(raw: NativeSnapshot): boolean {
+  return ['healthy', 'recovered'].includes(raw.snapshotQuality?.state ?? '')
+    || corroboratedSnapshots.has(raw) && corroboratableIosSnapshot(raw, raw.appBundleId!);
+}
+function semanticTree(raw: NativeSnapshot): string {
+  return JSON.stringify(raw.nodes.map(({ ref: _ref, ...node }) => node));
+}
 function assertSnapshotOwnership(raw: NativeSnapshot, app: string, device?: string): void {
   if (isSystemSurface(raw)) throw new BlockedError('The observed native surface belongs to the operating system. System dialogs and overlays are unsupported.');
   const apps = [raw.appBundleId, raw.identifiers?.appBundleId, raw.identifiers?.appId, raw.identifiers?.package].filter(value => value !== undefined && value !== null);
@@ -62,7 +82,7 @@ function ancestors(node: Node, nodes: Node[]): Node[] {
 }
 export function normalizeNative(raw: NativeSnapshot, app: string, secrets: string[], device?: string): NativeObservation {
   assertSnapshotOwnership(raw, app, device);
-  if (!raw.nodes?.length || !['healthy', 'recovered'].includes(raw.snapshotQuality?.state ?? '')) throw new BlockedError('Native accessibility evidence is empty or unhealthy.');
+  if (!raw.nodes?.length || !trustedQuality(raw)) throw new BlockedError('Native accessibility evidence is empty or unhealthy.');
   const nodes = new Map<string, Node>(), controls: Control[] = [];
   for (const node of raw.nodes) {
     if (!visible(node)) continue;
@@ -103,7 +123,7 @@ export function nativeCheck(raw: NativeSnapshot, assertion: Assertion): CheckRes
   // occurrences once, without collapsing different sibling entities.
   matches = matches.filter(node => !ancestors(node, raw.nodes).some(parent => matches.some(match => match.index === parent.index)));
   const shown = matches.filter(visible);
-  const complete = raw.truncated === false && raw.visibility?.partial === false && !raw.nodes.some(node => node.hiddenContentAbove || node.hiddenContentBelow) && ['healthy', 'recovered'].includes(raw.snapshotQuality?.state ?? '');
+  const complete = raw.truncated === false && raw.visibility?.partial === false && !raw.nodes.some(node => node.hiddenContentAbove || node.hiddenContentBelow) && trustedQuality(raw);
   let observed: CheckResult['observed'];
   if (['absent', 'count'].includes(assertion.kind) && !complete) throw new BlockedError('Absence/count needs a complete visible native collection. Scroll-hidden or truncated evidence cannot prove it.');
   if (assertion.kind === 'visible' && !shown.length && !complete) throw new BlockedError('Incomplete native evidence cannot establish that the expected element is missing.');
@@ -164,22 +184,36 @@ export class MobileDriver {
   }
   async observe(signal: AbortSignal): Promise<NativeObservation> {
     if (!this.ready) throw new BlockedError('Open an owned native app session before capturing evidence.');
+    const raw = await this.trustedSnapshot(signal);
+    return normalizeNative(raw, this.appIdentity, this.secrets, this.target.device);
+  }
+  private async trustedSnapshot(signal: AbortSignal, rejectUnsafePixels = false): Promise<NativeSnapshot> {
     const end = Date.now() + 5000;
+    let previous: { tree: string; generation: number } | undefined;
     do {
       const raw = await this.rawSnapshot(signal);
+      if (this.recording && !this.captureAllowed(raw)) {
+        // A private field in either corroboration frame invalidates the whole
+        // recording, even if the tree changes again before the second read.
+        await this.finishRecording(signal, false);
+      }
+      if (rejectUnsafePixels && !this.captureAllowed(raw)) throw new BlockedError('Native pixels cannot be shared after an unsafe screen appeared during verification.');
       // A newly launched React Native app may initially expose only its root.
       // Waiting for evidence is safe; interpreting that tree as an absent field isn't.
-      if (raw.nodes?.some(node => node.index !== 0 && visible(node)) && raw.snapshotQuality?.state !== 'sparse') {
-        if (this.recording && !this.captureAllowed(raw)) {
-          // Discard the whole local clip if a later screen exposes an input or
-          // known secret. It must never become a shareable report artifact.
-          await this.finishRecording(signal, false);
-        }
-        return normalizeNative(raw, this.appIdentity, this.secrets, this.target.device);
+      if (raw.nodes?.some(node => node.index !== 0 && visible(node))) {
+        if (['healthy', 'recovered'].includes(raw.snapshotQuality?.state ?? '')) return raw;
+        if (this.target.platform === 'ios' && corroboratableIosSnapshot(raw, this.appIdentity)) {
+          const tree = semanticTree(raw);
+          if (previous?.tree === tree && previous.generation !== raw.refsGeneration) {
+            corroboratedSnapshots.add(raw);
+            return raw;
+          }
+          previous = { tree, generation: raw.refsGeneration! };
+        } else previous = undefined;
       }
       await delay(100, undefined, { signal });
     } while (Date.now() < end);
-    throw new BlockedError('App accessibility content did not become ready within five seconds.');
+    throw new BlockedError('App accessibility content could not be verified within five seconds.');
   }
   async execute(observation: NativeObservation, control: Control, step: Step, value: string | null, signal: AbortSignal, onDispatch: () => void = () => {}): Promise<void> {
     // Refresh before dispatch, then pin the ref frame. A changed semantic target
@@ -299,9 +333,10 @@ export class MobileDriver {
     if (!this.recording) return null;
     let safe = false;
     try {
-      const raw = await this.rawSnapshot(signal);
-      safe = raw.nodes?.length > 0 && ['healthy', 'recovered'].includes(raw.snapshotQuality?.state ?? '') && this.captureAllowed(raw);
+      const raw = await this.trustedSnapshot(signal);
+      safe = this.recording && this.captureAllowed(raw);
     } catch { /* Missing final evidence must discard pixels, never publish them. */ }
+    if (!this.recording) return null;
     return this.finishRecording(signal, safe);
   }
   private async finishRecording(signal: AbortSignal, safe: boolean): Promise<string | null> {
@@ -375,9 +410,9 @@ export class MobileDriver {
       throw new BlockedError('Native screenshot returned mismatched app/device identity. The artifact was discarded.');
     }
     let finalState: NativeSnapshot;
-    try { finalState = await this.rawSnapshot(signal); }
+    try { finalState = await this.trustedSnapshot(signal, true); }
     catch { await discard(); throw new BlockedError('Native screenshot ownership could not be confirmed after capture. The artifact was discarded.'); }
-    if (!finalState.nodes?.length || !['healthy', 'recovered'].includes(finalState.snapshotQuality?.state ?? '') || !this.captureAllowed(finalState)) {
+    if (!this.captureAllowed(finalState)) {
       await discard();
       throw new BlockedError('Native screenshot ended on an unsafe or mismatched app screen. The artifact was discarded.');
     }
