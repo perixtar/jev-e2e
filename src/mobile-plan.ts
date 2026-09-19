@@ -135,12 +135,20 @@ function privateInputLiteral(text: string): boolean {
   // grammar. Any extra word could itself be a short username or secret; it
   // must stay local until the author replaces it with an @fixture binding.
   const publicWords = new Set('a an the and or to for in on of with without as is was are be been should can cannot not that this those then after before use enter type fill check verify test inspect confirm reject wrong invalid valid missing accepted rejected expired works fails login log sign safely safe flow success failure page screen form field target entry reset refresh validation expectation fixture fixtures input inputs credentials email e-mail user name username password passcode pass phrase passphrase pin otp one time verification security code access token secret api key credit card number cvv cvc social ssn account'.split(' '));
+  const privateTerm = /\b(?:password|passcode|pass\s*phrase|pin|otp|one[- ]time(?:\s+(?:password|code))?|verification\s+code|security\s+code|credit\s+card|card\s+number|cvv|cvc|social\s+security(?:\s+number)?|ssn|access\s+token|token|secret|api.?key|e-?mail|user\s*name|login)\b/gi;
   for (const line of authored.split('\n')) {
     if (!/^(?:Case|Goal):/i.test(line)) continue;
     const remaining = line.replace(nativeActionExpression(), '');
-    if (!sensitiveInputTarget(remaining) && !/\blogin\b/i.test(remaining)) continue;
-    const words = remaining.replace(/^(?:Case|Goal):/i, '').match(/[A-Za-z0-9][A-Za-z0-9._+-]*/g) ?? [];
-    if (words.some(word => !publicWords.has(word.toLowerCase()))) return true;
+    for (const match of remaining.matchAll(privateTerm)) {
+      const preceding = remaining.slice(0, match.index).replace(/^(?:Case|Goal):/i, '').match(/[A-Za-z0-9][A-Za-z0-9._+-]*/g) ?? [];
+      if (preceding.length && !publicWords.has(preceding.at(-1)!.toLowerCase())) return true;
+      let tail = remaining.slice(match.index! + match[0].length);
+      // A title can describe an unrelated next task without making its object
+      // a credential value: "Login and add lamp". It does not define actions.
+      if (/^\s+and\s+(?:add|search|open|view|remove)\b/i.test(tail)) tail = '';
+      const trailing = tail.match(/[A-Za-z0-9][A-Za-z0-9._+-]*/g) ?? [];
+      if (trailing.some(word => !publicWords.has(word.toLowerCase()))) return true;
+    }
   }
   // A credential does not need to look random to be private. Catch the common
   // username/password sentence shapes after removing fixture references so
@@ -150,13 +158,13 @@ function privateInputLiteral(text: string): boolean {
     new RegExp('\\b(?:sign\\s*in|log\\s*in)\\s+as\\s+' + authToken + '\\s+(?:with|using)\\s+(' + authToken + ')', 'i'),
     new RegExp('\\b(?:use|enter|type|provide)\\s+(' + authToken + ')\\s+to\\s+(?:sign\\s*in|log\\s*in|authenticate)\\b', 'i'),
     new RegExp('\\bauthenticate\\s+' + authToken + '\\s*(?:/|\\||with|using)\\s*(' + authToken + ')', 'i'),
-    new RegExp('\\blogin[ \\t]+(?!(?:is|was|should|must|can|cannot|will|remains|fails|succeeds|works|with|using|without|after|before|when)\\b)' + authToken + '[ \\t]+(' + authToken + ')', 'i'),
+    new RegExp('\\blogin[ \\t]+(?!(?:is|was|should|must|can|cannot|will|remains|fails|succeeds|works|with|using|without|after|before|when|and)\\b)' + authToken + '[ \\t]+(' + authToken + ')', 'i'),
   ];
   if (authLiteralPatterns.some(pattern => pattern.test(authored))) return true;
   const unboundIdentityPatterns = [
     new RegExp('\\b(?:sign\\s*in|log\\s*in)\\s+as\\s+' + authToken + '\\b', 'i'),
     new RegExp('\\bauthenticate\\s+' + authToken + '\\b', 'i'),
-    new RegExp('^[ \\t]*Case:[ \\t]*Login[ \\t]+(?!(?:flow|success|page|with|failure|failed|rejected|invalid|valid|test|screen|form|state)\\b)' + authToken + '\\b', 'im'),
+    new RegExp('^[ \\t]*Case:[ \\t]*Login[ \\t]+(?!(?:flow|success|page|with|failure|failed|rejected|invalid|valid|test|screen|form|state|and)\\b)' + authToken + '\\b', 'im'),
   ];
   if (unboundIdentityPatterns.some(pattern => pattern.test(authored))) return true;
   if (/\b(?:password|passcode|pin|otp|one[- ]time(?:\s+(?:password|code))?|verification\s+code|security\s+code|credit\s+card|card\s+number|cvv|cvc|social\s+security(?:\s+number)?|ssn|token|secret|api.?key|e-?mail|user\s*name)\b"?(?:\s+field)?\s*(?:with|using|=|is|:|to|should\s+be)\s*(?!@)(?:"[^"\n]+"|[^\s,.;]+)/i.test(authored)) return true;
