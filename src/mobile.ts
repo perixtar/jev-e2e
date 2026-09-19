@@ -150,8 +150,11 @@ export class MobileDriver {
       if (extension !== expected) throw new BlockedError(`${this.target.platform} build paths must end in ${expected}.`);
       const installed = await this.connection.call('install', { ...this.selection, appPath }, signal, 60000);
       const identity = installed.bundleId ?? installed.package ?? installed.appId;
+      const installedDeviceIds = [installed.identifiers?.deviceId, installed.identifiers?.udid, installed.identifiers?.serial].filter(value => value !== undefined && value !== null);
+      // The pinned SDK does not return a device ID from install. Reject any
+      // conflicting ID it does return; open below must disclose the exact one.
       if (!identity || !matchesDisclosedIdentity(identity, [installed.bundleId, installed.package, installed.appId, installed.identifiers?.appBundleId, installed.identifiers?.appId, installed.identifiers?.package])
-        || !matchesDisclosedIdentity(this.target.device, [installed.identifiers?.deviceId, installed.identifiers?.udid, installed.identifiers?.serial])) throw new BlockedError('Installed build did not expose the selected device and app identity.');
+        || installedDeviceIds.some(value => value !== this.target.device)) throw new BlockedError('Installed build did not expose the selected device and app identity.');
       this.appIdentity = identity;
     } else if (pathLike) throw new BlockedError('Native build path does not exist. Pass an existing .app/.apk path or an installed app ID.');
     this.opened = true;
