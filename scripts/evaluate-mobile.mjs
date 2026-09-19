@@ -32,8 +32,10 @@ async function matrix(platform){
     // Each platform has a reserved half of the aggregate budget while concurrent.
     const ownSpent=trials.filter(t=>t.platform===platform).reduce((n,t)=>n+t.result.model.cost,0),remaining=cap/platforms.length-ownSpent;
     if(remaining<=0)throw Error('Aggregate evaluation budget reached.');
-    const baselines=[];
-    const result=await runSuite({platform,app:values.app,device:values[`${platform}-device`],planner:'off',casesText:mode==='replay'?undefined:source,replay:mode==='replay'?replays[platform]:undefined,fixtures,signal:controller.signal,timeoutMs:90000,maxCost:Math.min(.20,remaining),outputDirectory:false,beforeCase:async index=>{const config=lab.reset(mode==='broken'?faults[index]:'healthy',platform);baselines.push({index,...config});},onProgress:event=>{if(event.type==='result')console.log(platform,mode,event.caseName,event.message);}});
+    const baselines=[],trialDirectory=join(directory,'artifacts',platform,mode,String(round));
+    // Keep final screenshot/report collection inside the measured case duration.
+    // Preview streaming stays off so this matrix measures the ordinary CLI path.
+    const result=await runSuite({platform,app:values.app,device:values[`${platform}-device`],planner:'off',casesText:mode==='replay'?undefined:source,replay:mode==='replay'?replays[platform]:undefined,fixtures,signal:controller.signal,timeoutMs:90000,maxCost:Math.min(.20,remaining),outputDirectory:trialDirectory,beforeCase:async index=>{const config=lab.reset(mode==='broken'?faults[index]:'healthy',platform);baselines.push({index,...config});}});
     const baselineVerified=baselines.length===5&&baselines.every(b=>lab.reads.some(read=>read.platform===platform&&read.id===b.id));
     const correctFaults=mode==='broken'?result.cases.map((test,index)=>test.verdict==='FAIL'&&test.checks.some(check=>!check.passed&&[
       check.assertion.target?.text==='Invalid credentials'&&check.observed===false,
@@ -60,10 +62,10 @@ try{
       const perFlow=Array.from({length:5},(_,i)=>runs.filter(t=>t.result.cases[i]?.verdict===(mode==='broken'?'FAIL':'PASS')).length);
       const durations=cases.map(c=>c.durationMs).sort((a,b)=>a-b),warmDurations=runs.filter(t=>t.round>1).flatMap(t=>t.result.cases.map(c=>c.durationMs)).sort((a,b)=>a-b);
       const percentile=(values,p)=>values.length?values[Math.min(values.length-1,Math.ceil(values.length*p)-1)]:null;
-      return [mode,{...counts,perFlow,medianMs:percentile(durations,.5),p95Ms:percentile(durations,.95),warmMedianMs:percentile(warmDurations,.5),modelCost:runs.reduce((n,t)=>n+t.result.model.cost,0),plannerRequests:runs.reduce((n,t)=>n+t.result.model.plannerRequests,0),jevRequests:runs.reduce((n,t)=>n+t.result.model.jevRequests,0)}];
+      return [mode,{...counts,perFlow,medianMs:percentile(durations,.5),p95Ms:percentile(durations,.95),warmMedianMs:percentile(warmDurations,.5),artifactMs:runs.reduce((n,t)=>n+(t.result.timings?.artifact??0),0),modelCost:runs.reduce((n,t)=>n+t.result.model.cost,0),plannerRequests:runs.reduce((n,t)=>n+t.result.model.plannerRequests,0),jevRequests:runs.reduce((n,t)=>n+t.result.model.jevRequests,0)}];
     }));
     const verified=trials.filter(t=>t.platform===platform).every(t=>t.baselineVerified);
-    const passed=verified&&rounds===10&&groups.healthy.PASS>=48&&groups.healthy.perFlow.every(n=>n>=9)&&groups.healthy.warmMedianMs!==null&&groups.healthy.warmMedianMs<=60000&&groups.broken.PASS===0&&groups.broken.correctFAIL>=48&&groups.replay.PASS>=48&&groups.replay.plannerRequests===0;
+    const passed=verified&&rounds===10&&groups.healthy.PASS>=48&&groups.healthy.perFlow.every(n=>n>=9)&&groups.healthy.warmMedianMs!==null&&groups.healthy.warmMedianMs<=60000&&groups.healthy.artifactMs>0&&groups.broken.PASS===0&&groups.broken.correctFAIL>=48&&groups.replay.PASS>=48&&groups.replay.plannerRequests===0&&groups.replay.jevRequests===0;
     return {platform,passed,groups};
   });await writeFile(join(directory,'summary.json'),JSON.stringify({implementationSha:implementationSha.trim(),summary,spent,canceled:controller.signal.aborted},null,2),{mode:0o600});console.log(JSON.stringify({implementationSha:implementationSha.trim(),summary,spent,directory},null,2));process.exitCode=controller.signal.aborted?130:summary.every(s=>s.passed)?0:1;
 }finally{process.removeListener('SIGINT',stop);process.removeListener('SIGTERM',stop);await persist();await lab.close();}

@@ -58,7 +58,7 @@ export async function runMobileSuite(options: RunOptions): Promise<SuiteResult> 
       const values = test.steps.map(step => { if (!step.fixture) return step.value; const value = fixtures.inputs[step.fixture]?.value; if (value === undefined) throw new BlockedError(`Missing input fixture: ${step.fixture}.`); return value; });
       await options.beforeCase?.(i); caseSignal.throwIfAborted();
       await timed('setup', () => driver.open(caseSignal));
-      target.device = driver.target.device; versions = await nativeVersions({ ...target, app: driver.resolvedApp }, caseSignal);
+      target.device = driver.target.device; versions = await timed('setup', () => nativeVersions({ ...target, app: driver.resolvedApp }, caseSignal));
       progress({ type: 'context.opened', message: `Opened ${platform} app on ${target.device}; data is preserved.`, caseName: test.name });
       const lastPrivate = test.steps.reduce((last, step, index) => step.fixture || sensitiveInputTarget(step.target ?? '') ? index : last, -1);
       let cacheIndex = 0;
@@ -128,7 +128,7 @@ export async function runMobileSuite(options: RunOptions): Promise<SuiteResult> 
       }
     } catch (e) { result.verdict = 'BLOCKED'; result.reason = signal.aborted ? 'Run canceled.' : caseSignal.aborted ? 'Case deadline reached.' : e instanceof BlockedError ? e.message : 'Native execution/verification could not complete reliably. An uncertain action was not repeated.'; }
     finally {
-      if (directory && !caseSignal.aborted) {
+      if (directory && !caseSignal.aborted && !driver.interrupted) {
         try {
           if (recordingStarted) { const path = await timed('artifact', () => driver.stopRecording(AbortSignal.any([caseSignal, AbortSignal.timeout(20000)]))); if (path) { result.video = `${i + 1}.mp4`; result.videoMetadata = driver.recordingMetrics; } }
           if (await timed('artifact', () => driver.screenshot(join(directory, `${i + 1}.png`), AbortSignal.any([caseSignal, AbortSignal.timeout(10000)])))) result.screenshot = `${i + 1}.png`;

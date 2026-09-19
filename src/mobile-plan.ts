@@ -5,6 +5,11 @@ import { BlockedError, validateSuite, sensitiveInputTarget, unsupportedNativeMut
 
 const quote = (text: string) => { try { return JSON.parse(`"${text}"`) as string; } catch { throw new BlockedError('Use JSON-style double-quoted names and values.'); } };
 const empty = (action: Step['action'], target: string | null = null): Step => ({ action, target, value: null, fixture: null });
+function negatedNativeAction(text: string): boolean {
+  const action = '(?:tap(?:ping)?|click(?:ing)?|fill(?:ing)?|replac(?:e|ing)|check(?:ing)?|uncheck(?:ing)?|enabl(?:e|ing)|disabl(?:e|ing)|relaunch(?:ing)?|restart(?:ing)?|scroll(?:ing)?|go(?:ing)?\\s+back|dismiss(?:ing)?|hid(?:e|ing)|wait(?:ing)?)';
+  return new RegExp('(?:\\bnever\\b|\\bdo\\s+not\\b|\\bdon[’\']t\\b|\\bmust\\s+not\\b|\\bshould\\s+not\\b|\\bwithout\\b)[^.!?;\\n]{0,120}\\b' + action + '\\b', 'i').test(text)
+    || new RegExp('\\b(?:avoid|skip|except)\\s+(?:to\\s+)?' + action + '\\b', 'i').test(text);
+}
 export function nativeStep(text: string): Step {
   if (/^(relaunch|back|dismiss keyboard)$/i.test(text)) return empty(/^dismiss/i.test(text) ? 'keyboard' : text.toLowerCase() as Step['action']);
   let m = text.match(/^(tap|click|check|uncheck|enable|disable) "((?:\\.|[^"\\])*)"$/i);
@@ -33,6 +38,7 @@ export function parseNative(text: string, platform: 'ios' | 'android'): Suite {
   const cases = splitCases(text).map(({ name, source }) => {
     const test = { name, source, goal: name, auth: null, steps: [] as Step[], assertions: [] as Assertion[], blockedReason: null as string | null };
     try {
+      if (negatedNativeAction(source)) throw new BlockedError('Negative native action clauses are ambiguous. Describe only the actions that should run.');
       let goals = 0;
       for (const line of source.split('\n').slice(1).filter(line => line.trim())) {
         const field = line.match(/^(Goal|Step|Expect):\s*(.*)$/i);
@@ -51,6 +57,7 @@ export function parseNative(text: string, platform: 'ios' | 'android'): Suite {
 // Protect bindings and order that the author made unambiguous in prose.
 // Broader phrasing still uses the optional compiler; these are constraints.
 export function authoredNativeSteps(source: string): Step[] {
+  if (negatedNativeAction(source)) throw new BlockedError('Negative native action clauses are ambiguous. Describe only the actions that should run.');
   const intent = source.split('\n').filter(line => !/^(Case|Expect):/i.test(line)).join('\n');
   const token = '"(?:\\\\.|[^"\\\\])*"';
   const value = '(?:'+token+'|@[A-Za-z0-9_.-]+)';
@@ -64,10 +71,38 @@ export function authoredNativeSteps(source: string): Step[] {
     .replace(/^wait\s+for\s+(?:the\s+)?(?:exact\s+)?text\s+/i,'Wait for text ')));
 }
 function privateInputLiteral(text: string): boolean {
-  const authored = text.split('\n').filter(line => !/^\s*(?:Case|Expect):/i.test(line)).join('\n');
-  if (/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i.test(authored) || /\b\d{3}-\d{2}-\d{4}\b/.test(authored)) return true;
-  if (/\b(?:password|passcode|pin|otp|one[- ]time(?:\s+(?:password|code))?|verification\s+code|security\s+code|credit\s+card|card\s+number|cvv|cvc|social\s+security(?:\s+number)?|ssn|token|secret|api.?key|e-?mail|user\s*name)\b"?\s*(?:with|using|=|is|:|to)\s*(?!@)(?:"[^"\n]+"|[^\s,.;]+)/i.test(authored)) return true;
-  if (/\b(?:enter|type|input|use|fill|replace|set)\s+(?!@)(?:"[^"\n]+"|'[^'\n]+'|\d[\d -]{2,20}\d|[A-Za-z0-9][A-Za-z0-9._-]{2,})\s+(?:in|into|for|as)\s+(?:the\s+)?"?(?:password|passcode|pass\s*phrase|pin|otp|one[- ]time(?:\s+(?:password|code))?|verification\s+code|security\s+code|credit\s+card|card\s+number|cvv|cvc|social\s+security(?:\s+number)?|ssn|token|secret|api.?key|e-?mail|user\s*name|login(?:\s+(?:id|name))?)\b/i.test(authored)) return true;
+  // The planner receives every line, including case names and expectations, so
+  // inspect that exact source. Only explicit @fixture bindings may carry values
+  // for private fields; unfamiliar private prose fails closed before a request.
+  if (/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i.test(text) || /\b\d{3}-\d{2}-\d{4}\b/.test(text)) return true;
+  const token = '"(?:\\\\.|[^"\\\\])*"';
+  const fixtureBinding = new RegExp('\\bin\\s+' + token + '\\s+use\\s+@[A-Za-z0-9_.-]+|\\b(?:fill|replace)\\s+' + token + '\\s+(?:with|using|=)\\s+@[A-Za-z0-9_.-]+', 'gi');
+  const secretShaped = (value: string) => /^\d{4,12}$/.test(value) || (/^\S{6,}$/.test(value) && /[-_!#$%^&*+=]/.test(value)) || /^[A-Za-z0-9+/]{20,}={0,2}$/.test(value) || /^(?:sk|pk|api|token)[-_]/i.test(value);
+  for (const line of text.split('\n')) {
+    const field = line.match(/^\s*(Case|Goal|Step|Expect):\s*(.*)$/i);
+    const body = field?.[2] ?? line;
+    if (/^\s*Expect:/i.test(line)) {
+      const expectedText = body.match(/^text\s+"((?:\\.|[^"\\])*)"\s+is\s+(?:visible|absent)$/i);
+      const expectedValue = body.match(/\bequals\s+"((?:\\.|[^"\\])*)"\s*$/i);
+      const candidate = expectedText?.[1] ?? expectedValue?.[1];
+      if (candidate !== undefined && secretShaped(quote(candidate))) return true;
+    }
+    let authored = line.replace(fixtureBinding, '').replace(/@[A-Za-z0-9_.-]+/g, '');
+    if (field?.[1].toLowerCase() === 'step') {
+      try {
+        const step = nativeStep(body);
+        if (step.action !== 'fill') continue;
+        if (step.fixture && sensitiveInputTarget(step.target ?? '')) continue;
+      } catch { /* Unknown Step syntax is handled later, but must still be scanned. */ }
+    }
+    // A case title may describe a password/OTP behavior without containing the
+    // value. Direct secret forms above are still rejected from titles.
+    if (field?.[1].toLowerCase() === 'case') continue;
+    if (sensitiveInputTarget(authored)) return true;
+  }
+  const authored = text.replace(fixtureBinding, '').replace(/@[A-Za-z0-9_.-]+/g, '');
+  if (/\b(?:password|passcode|pin|otp|one[- ]time(?:\s+(?:password|code))?|verification\s+code|security\s+code|credit\s+card|card\s+number|cvv|cvc|social\s+security(?:\s+number)?|ssn|token|secret|api.?key|e-?mail|user\s*name)\b"?\s*(?:with|using|=|is|:|to|should\s+be)\s*(?!@)(?:"[^"\n]+"|[^\s,.;]+)/i.test(authored)) return true;
+  if (/\b(?:enter|type|input|use|fill|replace|set|put|paste|provide)\s+(?:code\s+)?(?!@)(?:"[^"\n]+"|'[^'\n]+'|\d[\d -]{2,20}\d|[A-Za-z0-9][A-Za-z0-9._-]{2,})\s+(?:in|into|for|as)\s+(?:the\s+)?"?(?:password|passcode|pass\s*phrase|pin|otp|one[- ]time(?:\s+(?:password|code))?|verification\s+code|security\s+code|credit\s+card|card\s+number|cvv|cvc|social\s+security(?:\s+number)?|ssn|token|secret|api.?key|e-?mail|user\s*name|login(?:\s+(?:id|name))?)\b/i.test(authored)) return true;
   for (const line of authored.split('\n')) {
     const login = line.match(/\b(?:sign\s*in|log\s*in|authenticate)\b\s+(?:with|using)\s+(.+?)(?:,?\s+then\b|$)/i);
     if (!login) continue;
@@ -79,6 +114,7 @@ function privateInputLiteral(text: string): boolean {
 }
 export async function compileNative(text: string, platform: 'ios' | 'android', mode: 'on' | 'off', fixtures: Fixtures, provider: ProviderOptions, signal: AbortSignal, secrets: string[]): Promise<Suite> {
   signal.throwIfAborted();
+  if (negatedNativeAction(text)) throw new BlockedError('Negative native action clauses are ambiguous. Describe only the actions that should run.');
   const authoredLiteral = authoredNativeSteps(text).some(step => step.action === 'fill' && step.value !== null && sensitiveInputTarget(step.target ?? ''));
   const targetFirstLiteral = /"(?:password|passcode|pass\s*phrase|pin|otp|one[- ]time(?:\s+(?:password|code))?|verification\s+code|security\s+code|credit\s+card|card\s+number|cvv|cvc|social\s+security(?:\s+number)?|ssn|token|secret|api.?key|e-?mail|user\s*name)"?\s*(?:with|using|=|is)\s*"/i.test(text);
   const valueFirstLiteral = /\b(?:enter|type|fill|replace)\s+"(?:\\.|[^"\\])+"\s+(?:in|into|for)\s+"?(?:password|passcode|pin|otp|verification\s+code|security\s+code|credit\s+card|card\s+number|cvv|cvc|social\s+security|ssn|token|secret|api.?key|e-?mail|user\s*name)\b/i.test(text);

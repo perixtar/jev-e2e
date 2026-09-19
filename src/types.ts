@@ -80,7 +80,7 @@ export type Progress = { type: string; message: string; caseName?: string; step?
 export class BlockedError extends Error { constructor(message: string) { super(message); this.name = 'BlockedError'; } }
 
 export function unsupportedNativeMutation(text: string): boolean {
-  return /\b(?:buy(?:\s+now)?|checkout|check\s+out|place\s+(?:an\s+)?order|order\s+now|pay(?:ment)?|purchase|transfer|wire|send|donate|tip|subscribe|book\s+now)\b/i.test(text);
+  return /\b(?:buy(?:\s+now)?|checkout|check\s+out|place\s+(?:an\s+)?order|order\s+now|(?:confirm|submit|finalize|complete)\s+(?:the\s+)?(?:order|booking|reservation)|pay(?:ment)?|purchase|transfer|wire|send|donate|tip|subscribe|book\s+now|message\s+(?:seller|buyer|host|guest|support|user)|(?:publish|post|submit)\s+(?:a\s+|the\s+)?(?:message|comment|review|reply|post))\b/i.test(text);
 }
 
 export function sensitiveInputTarget(text: string): boolean {

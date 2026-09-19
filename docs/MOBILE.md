@@ -48,7 +48,7 @@ jev-e2e plan --platform ios --app com.example.app \
 jev-e2e run --plan reviewed.json --device EXACT_ID
 ```
 
-For explicit steps, use `--planner off`. Neither explicit cases nor saved plans need a generative model call. Live discovery still uses Jev through `OPENROUTER_API_KEY`; a separate OpenAI key is unnecessary.
+For explicit steps, use `--planner off`. Explicit cases and saved plans need no prose-planner call. An unchanged saved flow can run with zero model calls; a stale target uses Jev for repair. Live discovery uses Jev through `OPENROUTER_API_KEY`; a separate OpenAI key is unnecessary.
 
 ```text
 Case: Quantity and persistence

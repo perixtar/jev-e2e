@@ -45,6 +45,7 @@ export class DeviceConnection {
   }
   async call<T = any>(command: string, args: object, signal: AbortSignal, timeoutMs = 30000): Promise<T> {
     signal.throwIfAborted();
+    if (this.stopping && command !== 'close') throw new BlockedError('Native connection is shutting down after an interrupted command. No new work was dispatched.');
     const bounded = AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]);
     const worker = this.start(), id = randomUUID();
     const cancel = () => { if (command === 'close') this.abortWorker(); else this.interrupt(); };
@@ -111,7 +112,11 @@ export class DeviceConnection {
     // fresh close request. Cancellation closes through that owner first.
     if (this.pending.size) this.interrupt();
     if (this.stopping) {
-      const released = await this.stopping; this.stopping = undefined;
+      const stopping = this.stopping, released = await stopping;
+      if (this.stopping === stopping) this.stopping = undefined;
+      // The fallback close may have created a replacement worker. Always tear
+      // down whatever is attached before reporting the owned session released.
+      this.abortWorker();
       if (released) { this.ownsSession = false; return; }
       throw new BlockedError('Owned native session release was not confirmed within 4.5 seconds.');
     }
@@ -125,6 +130,7 @@ export class DeviceConnection {
     }
     finally { this.abortWorker(); }
   }
+  get interrupted(): boolean { return Boolean(this.stopping); }
 }
 export function selectDevice(devices: Device[], platform: 'ios' | 'android', selector?: string): Device {
   const candidates = devices.filter(device => device.platform === platform && device.target === 'mobile' && (platform === 'ios' ? device.kind === 'simulator' : device.kind === 'emulator'));
