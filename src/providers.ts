@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { WebSuiteSchema, NativeSuiteSchema, BlockedError, type ModelStats, type Snapshot, type Step, type Selection } from './types.js';
+import { WebSuiteSchema, NativeSuiteSchema, BlockedError, unsupportedNativeMutation, type ModelStats, type Snapshot, type Step, type Selection } from './types.js';
 
 export type ProviderOptions = {
   apiKey: string; jevModel: string; plannerModel: string;
@@ -120,7 +120,7 @@ export async function decide(snapshot: Snapshot, step: Step, options: ProviderOp
       : ['check', 'uncheck'].includes(step.action) ? control.type === 'checkbox'
       : ['button', 'link'].includes(control.role)
   )).slice(0, 120);
-  const navigation = snapshot.controls.filter(control => !control.disabled && ['button', 'link'].includes(control.role) && !/delete|remove|pay|purchase|archive|save|submit|sign in|log in|sign out/i.test(control.label)).slice(0, 120);
+  const navigation = snapshot.controls.filter(control => !control.disabled && ['button', 'link'].includes(control.role) && !unsupportedNativeMutation(control.label) && !/delete|remove|archive|save|submit|sign in|log in|sign out/i.test(control.label)).slice(0, 120);
   const describe = (control: Snapshot['controls'][number]) => `${control.role}: ${control.label}; context: ${control.context}`;
   const targetCriteria = Object.fromEntries(compatible.map(control => [control.id, describe(control)]));
   targetCriteria.none = 'The directly matching control is absent. Do not select an indirect navigation control as the target.';

@@ -1,4 +1,4 @@
-import { mkdir, chmod, unlink, stat } from 'node:fs/promises';
+import { mkdir, chmod, unlink, stat, lstat } from 'node:fs/promises';
 import { resolve, extname, dirname, relative, isAbsolute, sep } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -23,6 +23,10 @@ const selected = (node: Node): boolean | null => {
   return /^(1|true|on|checked)$/i.test(node.value ?? '') ? true : /^(0|false|off|unchecked)$/i.test(node.value ?? '') ? false : null;
 };
 const visible = (node: Node) => node.visibleToUser !== false && node.hittable !== false && !node.interactionBlocked && Boolean(node.rect && node.rect.width > 0 && node.rect.height > 0);
+async function removeLocalArtifact(path: string): Promise<void> {
+  try { await unlink(path); }
+  catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw new BlockedError('Could not clear the requested local artifact path before capture.'); }
+}
 function ancestors(node: Node, nodes: Node[]): Node[] {
   const result: Node[] = [], seen = new Set<number>();
   while (node.parentIndex !== undefined) {
@@ -217,6 +221,7 @@ export class MobileDriver {
   async startRecording(path: string, signal: AbortSignal): Promise<void> {
     const expected = resolve(path);
     await mkdir(dirname(expected), { recursive: true, mode: 0o700 });
+    await removeLocalArtifact(expected);
     // Remember ownership before dispatch. A canceled or timed-out start can
     // still have begun recording on the device; close() removes any clip that
     // the SDK finalizes while releasing the session.
@@ -227,7 +232,7 @@ export class MobileDriver {
       const returned = typeof result?.outPath === 'string' ? resolve(result.outPath) : null;
       const child = returned ? relative(dirname(expected), returned) : null;
       if (returned && extname(returned).toLowerCase() === '.mp4' && child !== null && !isAbsolute(child) && child !== '..' && !child.startsWith(`..${sep}`)) this.recordingArtifacts.add(returned);
-      if (result?.recording !== 'started' || returned !== expected || result.showTouches !== false || result.recordingScope !== undefined && result.recordingScope !== 'app' || result.activeSessionApp !== undefined && result.activeSessionApp?.bundleId !== this.appIdentity) {
+      if (result?.recording !== 'started' || returned !== expected || result.showTouches !== false || result.recordingScope !== 'app' || result.activeSessionApp?.bundleId !== this.appIdentity) {
         this.recordingDiscardedReason = 'Recording start returned unsafe or mismatched scope/path evidence. Owned artifacts are discarded when the native session closes.';
         throw new BlockedError('Native recorder did not confirm the requested app-scoped, touch-hidden output.');
       }
@@ -259,7 +264,7 @@ export class MobileDriver {
       this.recordingDiscardedReason = 'Recorder produced no usable timeline. Owned recording files were discarded.'; await this.discardOwnedRecordings();
       throw new BlockedError('Native recorder produced no usable timeline.');
     }
-    if (result.showTouches !== false || result.recordingScope !== undefined && result.recordingScope !== 'app' || result.activeSessionApp !== undefined && result.activeSessionApp?.bundleId !== this.appIdentity || result.recorder !== undefined && result.recorder !== 'confirmed' || result.nativePathDisposition === 'pending') {
+    if (result.showTouches !== false || result.recordingScope !== 'app' || result.activeSessionApp?.bundleId !== this.appIdentity || result.recorder !== 'confirmed' || result.nativePathDisposition === 'pending') {
       this.recordingDiscardedReason = 'Recorder termination, app scope, or native-path safety was not confirmed. Owned recording files were discarded.';
       await this.discardOwnedRecordings();
       throw new BlockedError('Native recorder returned unsafe lifecycle evidence. The clip was discarded.');
@@ -267,6 +272,12 @@ export class MobileDriver {
     if (!safe) {
       this.recordingDiscardedReason = 'Recording was discarded because the final screen was unsafe or could not be verified.';
       await this.discardOwnedRecordings(); this.recording = false; this.recordingPath = undefined; return null;
+    }
+    const artifact = await lstat(expected).catch((error: NodeJS.ErrnoException) => { if (error.code === 'ENOENT') return null; throw error; });
+    if (!artifact?.isFile() || artifact.size <= 0) {
+      this.recordingDiscardedReason = 'Recorder did not create a new nonempty local file. Owned recording files were discarded.';
+      await this.discardOwnedRecordings();
+      throw new BlockedError('Native recorder did not produce a fresh usable artifact.');
     }
     await chmod(expected, 0o600);
     this.recordingMetrics = { durationMs: result.durationMs, ...(result.capturedDurationMs === undefined ? {} : {capturedDurationMs:result.capturedDurationMs}), ...(result.recordingBackend ? {backend:result.recordingBackend} : {}), ...(result.recorder === 'confirmed' ? {recorder:result.recorder} : {}), ...(['retirable','retired'].includes(result.nativePathDisposition) ? {nativePathDisposition:result.nativePathDisposition as 'retirable' | 'retired'} : {}) };
@@ -276,10 +287,14 @@ export class MobileDriver {
   async screenshot(path: string, signal: AbortSignal): Promise<boolean> {
     // Conservatively omit pixels when any private field/known secret is visible.
     // This avoids a new image dependency and is safer than text-only redaction.
+    const expected = resolve(path); await mkdir(dirname(expected), { recursive: true, mode: 0o700 }); await removeLocalArtifact(expected);
     const observation = await this.observe(signal);
     if (!this.captureAllowed(observation.native)) return false;
-    await this.connection.call('screenshot', { path, normalizeStatusBar: true }, signal, 10000);
-    await chmod(path, 0o600); return true;
+    const result = await this.connection.call('screenshot', { path: expected, normalizeStatusBar: true }, signal, 10000);
+    const returned = typeof result?.path === 'string' ? resolve(result.path) : null;
+    const artifact = await lstat(expected).catch((error: NodeJS.ErrnoException) => { if (error.code === 'ENOENT') return null; throw error; });
+    if (returned !== expected || !artifact?.isFile() || artifact.size <= 0) { await removeLocalArtifact(expected); throw new BlockedError('Native screenshot did not produce the requested fresh local artifact.'); }
+    await chmod(expected, 0o600); return true;
   }
   interrupt() { this.connection.interrupt(); }
   captureAllowed(raw: NativeSnapshot): boolean {

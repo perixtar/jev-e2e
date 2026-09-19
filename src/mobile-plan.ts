@@ -63,12 +63,25 @@ export function authoredNativeSteps(source: string): Step[] {
     .replace(/^go\s+back$/i,'Back')
     .replace(/^wait\s+for\s+(?:the\s+)?(?:exact\s+)?text\s+/i,'Wait for text ')));
 }
+function privateInputLiteral(text: string): boolean {
+  const authored = text.split('\n').filter(line => !/^\s*(?:Case|Expect):/i.test(line)).join('\n');
+  if (/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i.test(authored) || /\b\d{3}-\d{2}-\d{4}\b/.test(authored)) return true;
+  if (/\b(?:password|passcode|pin|otp|one[- ]time(?:\s+(?:password|code))?|verification\s+code|security\s+code|credit\s+card|card\s+number|cvv|cvc|social\s+security(?:\s+number)?|ssn|token|secret|api.?key|e-?mail|user\s*name)\b"?\s*(?:with|using|=|is|:)\s*(?!@)(?:"[^"\n]+"|[^\s,.;]+)/i.test(authored)) return true;
+  for (const line of authored.split('\n')) {
+    const login = line.match(/\b(?:sign\s*in|log\s*in|authenticate)\b\s+(?:with|using)\s+(.+?)(?:,?\s+then\b|$)/i);
+    if (!login) continue;
+    if (/"[^"\n]+"|'[^'\n]+'/.test(login[1])) return true;
+    const unexplained = login[1].replace(/@[A-Za-z0-9_.-]+/g, '').replace(/\b(?:and|those|the|provided|supplied|invalid|valid|credentials?|e-?mail|user\s*name|password)\b/gi, '').replace(/[^A-Za-z0-9]+/g, '');
+    if (unexplained) return true;
+  }
+  return false;
+}
 export async function compileNative(text: string, platform: 'ios' | 'android', mode: 'on' | 'off', fixtures: Fixtures, provider: ProviderOptions, signal: AbortSignal, secrets: string[]): Promise<Suite> {
   signal.throwIfAborted();
   const authoredLiteral = authoredNativeSteps(text).some(step => step.action === 'fill' && step.value !== null && sensitiveInputTarget(step.target ?? ''));
   const targetFirstLiteral = /"(?:password|passcode|pass\s*phrase|pin|otp|one[- ]time(?:\s+(?:password|code))?|verification\s+code|security\s+code|credit\s+card|card\s+number|cvv|cvc|social\s+security(?:\s+number)?|ssn|token|secret|api.?key|e-?mail|user\s*name)"?\s*(?:with|using|=|is)\s*"/i.test(text);
   const valueFirstLiteral = /\b(?:enter|type|fill|replace)\s+"(?:\\.|[^"\\])+"\s+(?:in|into|for)\s+"?(?:password|passcode|pin|otp|verification\s+code|security\s+code|credit\s+card|card\s+number|cvv|cvc|social\s+security|ssn|token|secret|api.?key|e-?mail|user\s*name)\b/i.test(text);
-  if (containsSecret(text, secrets) || authoredLiteral || targetFirstLiteral || valueFirstLiteral) throw new BlockedError('Use @fixture references for private inputs.');
+  if (containsSecret(text, secrets) || privateInputLiteral(text) || authoredLiteral || targetFirstLiteral || valueFirstLiteral) throw new BlockedError('Use @fixture references for private inputs.');
   if (/^Auth:/im.test(text) || /captcha|biometric|face id|touch id|canvas|pixel|looks (?:good|right)/i.test(text) || unsupportedNativeMutation(text)) throw new BlockedError('This native case needs an unsupported capability. Use observed UI actions and exact expectations.');
   const baseline = parseNative(text, platform);
   if (mode === 'off' || baseline.cases.every(test => !test.blockedReason)) return baseline;

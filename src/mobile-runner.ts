@@ -10,7 +10,7 @@ import { MobileDriver, nativeVersions } from './mobile.js';
 import { decide } from './providers.js';
 import { secretValues, sanitize, containsSecret } from './config.js';
 import { writeReport } from './report.js';
-import { BlockedError, sensitiveInputTarget, validateSuite, type Suite, type CaseResult, type SuiteResult, type Control, type Progress, type NativeTarget } from './types.js';
+import { BlockedError, sensitiveInputTarget, unsupportedNativeMutation, validateSuite, type Suite, type CaseResult, type SuiteResult, type Control, type Progress, type NativeTarget } from './types.js';
 
 const semantic = ({ tag, role, label, context, type, identifier }: Control) => ({ tag, role, label, context, type, ...(identifier ? { identifier } : {}) });
 export async function runMobileSuite(options: RunOptions): Promise<SuiteResult> {
@@ -101,7 +101,7 @@ export async function runMobileSuite(options: RunOptions): Promise<SuiteResult> 
           }
           if (!control || control.disabled || !control.capabilities?.includes(navigation ? 'click' : step.action)) throw new BlockedError('Decision selected an unavailable or incompatible native control.');
           if (!navigation && control.label !== step.target && control.identifier !== step.target) throw new BlockedError('Decision changed the authored native target. The action was not dispatched.');
-          if (navigation && /delete|remove|pay|purchase|archive|save|submit|sign in|log in|sign out|add|increase|decrease|enable|disable/i.test(control.label)) throw new BlockedError('Decision attempted unsafe native navigation.');
+          if (navigation && (unsupportedNativeMutation(control.label) || /delete|remove|archive|save|submit|sign in|log in|sign out|add|increase|decrease|enable|disable/i.test(control.label))) throw new BlockedError('Decision attempted unsafe native navigation.');
           // Once a private value has been entered, later captures must never
           // include it. A recording intentionally excludes all credential steps.
           const action = navigation ? { action: 'click' as const, target: control.label, value: null, fixture: null } : step;
