@@ -11,6 +11,10 @@ type SdkSnapshot = Awaited<ReturnType<Client['capture']['snapshot']>>;
 // Android's pinned SDK omits checked; the read-only platform adapter supplies it.
 export type NativeSnapshot = Omit<SdkSnapshot, 'nodes'> & { nodes: (SdkSnapshot['nodes'][number] & { checked?: boolean })[] };
 export type Device = Awaited<ReturnType<Client['devices']['list']>>[number];
+export function nativeToolEnvironment(environment: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const allowed = ['PATH', 'HOME', 'TMPDIR', 'TMP', 'TEMP', 'USERPROFILE', 'LOCALAPPDATA', 'SystemRoot', 'ComSpec', 'PATHEXT', 'ANDROID_HOME', 'ANDROID_SDK_ROOT', 'JAVA_HOME', 'DEVELOPER_DIR', 'LANG', 'LC_ALL'];
+  return Object.fromEntries(allowed.flatMap(name => environment[name] === undefined ? [] : [[name, environment[name]]]));
+}
 export class DeviceConnection {
   private worker?: ChildProcess;
   private pending = new Map<string, { resolve: (value: any) => void; reject: (error: Error) => void }>();
@@ -23,9 +27,7 @@ export class DeviceConnection {
   private start() {
     if (this.worker) return this.worker;
     mkdirSync(this.config.stateDir!, { recursive: true, mode: 0o700 }); chmodSync(this.config.stateDir!, 0o700);
-    const env = { ...process.env };
-    for (const name of Object.keys(env)) if (/API_KEY|TOKEN|PASSWORD|SECRET/i.test(name)) delete env[name];
-    const worker = fork(new URL('./device-worker.js', import.meta.url), [], { env, stdio: ['ignore', 'ignore', 'ignore', 'ipc'], execArgv: [] });
+    const worker = fork(new URL('./device-worker.js', import.meta.url), [], { env: nativeToolEnvironment(), stdio: ['ignore', 'ignore', 'ignore', 'ipc'], execArgv: [] });
     this.worker = worker;
     worker.on('message', (message: any) => {
       const wait = this.pending.get(message.id); if (!wait) return;
@@ -45,7 +47,7 @@ export class DeviceConnection {
     signal.throwIfAborted();
     const bounded = AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]);
     const worker = this.start(), id = randomUUID();
-    const cancel = () => { this.interrupt(); };
+    const cancel = () => { if (command === 'close') this.abortWorker(); else this.interrupt(); };
     bounded.addEventListener('abort', cancel, { once: true });
     try {
       if (command === 'open') this.ownsSession = true;
@@ -73,20 +75,36 @@ export class DeviceConnection {
     // Ask the same owning client to close while the canceled SDK request is
     // still in flight. Killing first can race daemon disconnect cleanup and
     // leave a durable device claim behind.
+    const deadline = Date.now() + 4400;
+    this.stopping = (async () => {
+      if (await this.closeOnWorker(worker, Math.min(1200, Math.max(1, deadline - Date.now())))) return true;
+      await new Promise(resolveDelay => setTimeout(resolveDelay, 75));
+      const remaining = deadline - Date.now(); if (remaining < 100) return false;
+      try { await this.call('close', {}, AbortSignal.timeout(remaining), remaining); return true; }
+      catch (error) { return /session.*not found|session_not_found|no active session/i.test(error instanceof Error ? error.message : ''); }
+      finally { this.abortWorker(); }
+    })();
+  }
+  private closeOnWorker(worker: ChildProcess, timeoutMs: number): Promise<boolean> {
     const id = randomUUID();
-    this.stopping = new Promise<boolean>(resolveStopping => {
+    return new Promise<boolean>(resolveStopping => {
       let done = false;
       const finish = (released: boolean) => {
         if (done) return; done = true; clearTimeout(timer);
         worker.removeListener('message', onMessage); worker.removeListener('exit', onExit);
         worker.kill('SIGTERM'); resolveStopping(released);
       };
-      const onMessage = (message: any) => { if (message.id === id) finish(!message.error); };
+      const onMessage = (message: any) => { if (message.id === id) finish(!message.error || /session.*not found|session_not_found|no active session/i.test(String(message.error))); };
       const onExit = () => finish(false);
-      const timer = setTimeout(() => finish(false), 4500); timer.unref();
+      const timer = setTimeout(() => finish(false), timeoutMs); timer.unref();
       worker.on('message', onMessage); worker.once('exit', onExit);
       worker.send({ id, config: this.config, command: 'close', args: {} }, error => { if (error) finish(false); });
     });
+  }
+  private abortWorker() {
+    const worker = this.worker; this.worker = undefined;
+    for (const wait of this.pending.values()) wait.reject(new BlockedError('Native connection stopped before session release was confirmed.'));
+    this.pending.clear(); worker?.kill('SIGTERM');
   }
   async close(): Promise<void> {
     // Reuse an idle owner connection so its disconnect cleanup cannot race a
@@ -95,6 +113,7 @@ export class DeviceConnection {
     if (this.stopping) {
       const released = await this.stopping; this.stopping = undefined;
       if (released) { this.ownsSession = false; return; }
+      throw new BlockedError('Owned native session release was not confirmed within 4.5 seconds.');
     }
     // A connection that lost a lease race must never send sessions.close():
     // on iOS that can interrupt the accessibility runner owned by the winner.
@@ -102,8 +121,9 @@ export class DeviceConnection {
     try { await this.call('close', {}, AbortSignal.timeout(4500), 4500); }
     catch (error) {
       if (!/session.*not found|session_not_found/i.test(error instanceof Error ? error.message : '')) throw error;
+      this.ownsSession = false;
     }
-    finally { this.interrupt(); }
+    finally { this.abortWorker(); }
   }
 }
 export function selectDevice(devices: Device[], platform: 'ios' | 'android', selector?: string): Device {

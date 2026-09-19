@@ -1,7 +1,7 @@
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {randomUUID} from 'node:crypto';
-import type {NativeSnapshot} from './device.js';
+import {nativeToolEnvironment, type NativeSnapshot} from './device.js';
 
 const execute = promisify(execFile);
 const decode = (value: string) => value.replace(/&(#x[0-9a-f]+|#\d+|amp|lt|gt|quot|apos);/gi, (_, entity: string) => entity[0] === '#' ? String.fromCodePoint(parseInt(entity.slice(entity[1]?.toLowerCase() === 'x' ? 2 : 1), entity[1]?.toLowerCase() === 'x' ? 16 : 10)) : ({amp:'&',lt:'<',gt:'>',quot:'"',apos:"'"}[entity.toLowerCase()]!));
@@ -28,7 +28,7 @@ export function androidCheckedEvidence(raw: NativeSnapshot, xml: string, app: st
 
 async function readAndroidXml(device: string, signal: AbortSignal): Promise<string | null> {
   const path = `/data/local/tmp/jev-checked-${randomUUID()}.xml`;
-  const env = {...process.env}; for (const name of Object.keys(env)) if (/API_KEY|TOKEN|PASSWORD|SECRET/i.test(name)) delete env[name];
+  const env = nativeToolEnvironment();
   const options = {env, signal, timeout:4000, maxBuffer:5_000_000};
   try {
     // UIAutomation permits one reader. Pause this device's SDK-owned helper,

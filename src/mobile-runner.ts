@@ -10,7 +10,7 @@ import { MobileDriver, nativeVersions } from './mobile.js';
 import { decide } from './providers.js';
 import { secretValues, sanitize, containsSecret } from './config.js';
 import { writeReport } from './report.js';
-import { BlockedError, validateSuite, type Suite, type CaseResult, type SuiteResult, type Control, type Progress, type NativeTarget } from './types.js';
+import { BlockedError, sensitiveInputTarget, validateSuite, type Suite, type CaseResult, type SuiteResult, type Control, type Progress, type NativeTarget } from './types.js';
 
 const semantic = ({ tag, role, label, context, type, identifier }: Control) => ({ tag, role, label, context, type, ...(identifier ? { identifier } : {}) });
 export async function runMobileSuite(options: RunOptions): Promise<SuiteResult> {
@@ -60,7 +60,7 @@ export async function runMobileSuite(options: RunOptions): Promise<SuiteResult> 
       await timed('setup', () => driver.open(caseSignal));
       target.device = driver.target.device; versions = await nativeVersions({ ...target, app: driver.resolvedApp }, caseSignal);
       progress({ type: 'context.opened', message: `Opened ${platform} app on ${target.device}; data is preserved.`, caseName: test.name });
-      const lastPrivate = test.steps.reduce((last, step, index) => step.fixture || /password|email|token|secret/i.test(step.target ?? '') ? index : last, -1);
+      const lastPrivate = test.steps.reduce((last, step, index) => step.fixture || sensitiveInputTarget(step.target ?? '') ? index : last, -1);
       let cacheIndex = 0;
       const cached = saved?.flows[i] ?? [];
       for (let stepIndex = 0; stepIndex < test.steps.length; stepIndex++) {
@@ -128,17 +128,18 @@ export async function runMobileSuite(options: RunOptions): Promise<SuiteResult> 
       }
     } catch (e) { result.verdict = 'BLOCKED'; result.reason = signal.aborted ? 'Run canceled.' : caseSignal.aborted ? 'Case deadline reached.' : e instanceof BlockedError ? e.message : 'Native execution/verification could not complete reliably. An uncertain action was not repeated.'; }
     finally {
-      clearTimeout(timer);
       if (directory && !caseSignal.aborted) {
         try {
-          if (recordingStarted) { const path = await timed('artifact', () => driver.stopRecording(AbortSignal.any([signal, AbortSignal.timeout(20000)]))); if (path) { result.video = `${i + 1}.mp4`; result.videoMetadata = driver.recordingMetrics; } }
-          if (await timed('artifact', () => driver.screenshot(join(directory, `${i + 1}.png`), AbortSignal.any([signal, AbortSignal.timeout(10000)])))) result.screenshot = `${i + 1}.png`;
+          if (recordingStarted) { const path = await timed('artifact', () => driver.stopRecording(AbortSignal.any([caseSignal, AbortSignal.timeout(20000)]))); if (path) { result.video = `${i + 1}.mp4`; result.videoMetadata = driver.recordingMetrics; } }
+          if (await timed('artifact', () => driver.screenshot(join(directory, `${i + 1}.png`), AbortSignal.any([caseSignal, AbortSignal.timeout(10000)])))) result.screenshot = `${i + 1}.png`;
         } catch { result.evidenceNotes = ['Requested native capture could not produce a usable artifact.']; }
         if (driver.recordingDiscardedReason) result.evidenceNotes = [...(result.evidenceNotes ?? []), driver.recordingDiscardedReason];
       }
+      if (caseSignal.aborted) { result.verdict = 'BLOCKED'; result.reason = signal.aborted ? 'Run canceled.' : 'Case deadline reached.'; }
+      clearTimeout(timer);
       let released = false;
       try { await timed('cleanup', () => driver.close()); released = true; }
-      catch { result.verdict = 'BLOCKED'; result.reason = 'Owned native session cleanup could not be confirmed.'; await driver.close().catch(() => {}); }
+      catch { result.verdict = 'BLOCKED'; result.reason = 'Owned native session cleanup could not be confirmed within the release deadline.'; }
       signal.removeEventListener('abort', stop);
       result.durationMs = Date.now() - caseStart; results.push(result);
       progress({ type: 'context.closed', message: released ? 'Released the owned native session.' : 'Owned native session release was not confirmed.', caseName: test.name });

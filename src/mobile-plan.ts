@@ -1,7 +1,7 @@
 import { splitCases, parseExpectation } from './plan.js';
 import { interpret, type ProviderOptions } from './providers.js';
 import { containsSecret } from './config.js';
-import { BlockedError, validateSuite, type Fixtures, type Suite, type Step, type Assertion } from './types.js';
+import { BlockedError, validateSuite, sensitiveInputTarget, unsupportedNativeMutation, type Fixtures, type Suite, type Step, type Assertion } from './types.js';
 
 const quote = (text: string) => { try { return JSON.parse(`"${text}"`) as string; } catch { throw new BlockedError('Use JSON-style double-quoted names and values.'); } };
 const empty = (action: Step['action'], target: string | null = null): Step => ({ action, target, value: null, fixture: null });
@@ -65,8 +65,11 @@ export function authoredNativeSteps(source: string): Step[] {
 }
 export async function compileNative(text: string, platform: 'ios' | 'android', mode: 'on' | 'off', fixtures: Fixtures, provider: ProviderOptions, signal: AbortSignal, secrets: string[]): Promise<Suite> {
   signal.throwIfAborted();
-  if (containsSecret(text, secrets) || /(?:password|email|token|secret|api.?key)"?\s*(?:with|using|=|is)\s*"/i.test(text)) throw new BlockedError('Use @fixture references for credential inputs.');
-  if (/^Auth:/im.test(text) || /captcha|biometric|face id|touch id|canvas|pixel|looks (?:good|right)|\bpay(?:ment)?\b|\bpurchase\b|send (?:a )?(?:dm|message)/i.test(text)) throw new BlockedError('This native case needs an unsupported capability. Use observed UI actions and exact expectations.');
+  const authoredLiteral = authoredNativeSteps(text).some(step => step.action === 'fill' && step.value !== null && sensitiveInputTarget(step.target ?? ''));
+  const targetFirstLiteral = /"(?:password|passcode|pass\s*phrase|pin|otp|one[- ]time(?:\s+(?:password|code))?|verification\s+code|security\s+code|credit\s+card|card\s+number|cvv|cvc|social\s+security(?:\s+number)?|ssn|token|secret|api.?key|e-?mail|user\s*name)"?\s*(?:with|using|=|is)\s*"/i.test(text);
+  const valueFirstLiteral = /\b(?:enter|type|fill|replace)\s+"(?:\\.|[^"\\])+"\s+(?:in|into|for)\s+"?(?:password|passcode|pin|otp|verification\s+code|security\s+code|credit\s+card|card\s+number|cvv|cvc|social\s+security|ssn|token|secret|api.?key|e-?mail|user\s*name)\b/i.test(text);
+  if (containsSecret(text, secrets) || authoredLiteral || targetFirstLiteral || valueFirstLiteral) throw new BlockedError('Use @fixture references for private inputs.');
+  if (/^Auth:/im.test(text) || /captcha|biometric|face id|touch id|canvas|pixel|looks (?:good|right)/i.test(text) || unsupportedNativeMutation(text)) throw new BlockedError('This native case needs an unsupported capability. Use observed UI actions and exact expectations.');
   const baseline = parseNative(text, platform);
   if (mode === 'off' || baseline.cases.every(test => !test.blockedReason)) return baseline;
   // Explicit unsupported steps are a user contract, never a request to invent replacements.

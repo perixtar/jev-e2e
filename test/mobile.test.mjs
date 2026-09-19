@@ -5,8 +5,8 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {parseNative,compileNative,authoredNativeSteps} from '../dist/mobile-plan.js';
 import {provider} from './helpers.mjs';
-import {MobileDriver,nativeCheck,normalizeNative,nativeMetadataEnvironment,nativeVersions} from '../dist/mobile.js';
-import {selectDevice} from '../dist/device.js';
+import {MobileDriver,nativeCheck,normalizeNative,nativeVersions} from '../dist/mobile.js';
+import {selectDevice,nativeToolEnvironment} from '../dist/device.js';
 import {readSavedPlan,savedHash} from '../dist/runner.js';
 import {writeReport} from '../dist/report.js';
 import {validateSuite,BlockedError} from '../dist/types.js';
@@ -29,10 +29,11 @@ test('native cases preserve every action, fixture and intermediate milestone; we
   for(const step of ['Reload','Select "Theme" with "Dark"','Swipe forever','Fill "Password" with "literal"']){
     const bad=parseNative(`Case: Unsupported\nGoal: Check\nStep: ${step}\nExpect: text "Done" is visible`,'ios');assert.ok(bad.cases[0].blockedReason);assert.equal(bad.cases[0].steps.length,0);
   }
-  for(const action of ['Tap "Purchase"','Tap "Send message"'])await assert.rejects(compileNative(`Case: Unsupported\nGoal: Do it\nStep: ${action}\nExpect: text "Done" is visible`,'ios','off',{inputs:{},auth:{}},provider,new AbortController().signal,[]),/unsupported capability/);
+  for(const action of ['Tap "Purchase"','Tap "Send message"','Tap "Buy now"','Tap "Place order"','Tap "Transfer funds"','Tap "Send"'])await assert.rejects(compileNative(`Case: Unsupported\nGoal: Do it\nStep: ${action}\nExpect: text "Done" is visible`,'ios','off',{inputs:{},auth:{}},provider,new AbortController().signal,[]),/unsupported capability/);
+  for(const source of ['Goal: Fill "OTP" with "123456", then tap "Verify".','Goal: Enter "123456" into "Verification code", then tap "Verify".','Goal: Fill "Credit card" using "4111111111111111", then tap "Continue".'])await assert.rejects(compileNative(`Case: Private literal\n${source}\nExpect: text "Done" is visible`,'ios','on',{inputs:{},auth:{}},provider,new AbortController().signal,[]),/fixture references for private inputs/);
 });
 test('native metadata subprocesses receive only toolchain variables and obey cancellation',async()=>{
- const env=nativeMetadataEnvironment({PATH:'/bin',HOME:'/home/test',ANDROID_HOME:'/sdk',OPENROUTER_API_KEY:'secret',E2E_TEST_EMAIL:'private@example.test',PASSWORD:'private'});
+ const env=nativeToolEnvironment({PATH:'/bin',HOME:'/home/test',ANDROID_HOME:'/sdk',OPENROUTER_API_KEY:'secret',E2E_TEST_EMAIL:'private@example.test',CUSTOM_LOGIN_ID:'arbitrary-fixture-secret',PASSWORD:'private'});
  assert.deepEqual(env,{PATH:'/bin',HOME:'/home/test',ANDROID_HOME:'/sdk'});assert.ok(!JSON.stringify(env).includes('secret'));assert.ok(!JSON.stringify(env).includes('private'));
  await assert.rejects(nativeVersions({platform:'ios',app,device:'sim',baseline:'preserve'},AbortSignal.abort()),error=>error?.name==='AbortError');
 });
@@ -49,6 +50,11 @@ test('native verification distinguishes an actual mismatch from incomplete or am
   assert.throws(()=>nativeCheck(snapshot([node(0,'android.widget.Switch','Notifications',{selected:false})]),assertion('checked','Notifications',false,'label')),BlockedError);
   assert.equal(nativeCheck(snapshot([node(0,'StaticText','Email',{value:'Email'})]),assertion('visible','Email',true,'label')).passed,false);
   assert.equal(nativeCheck(snapshot([node(0,'android.widget.EditText','Search',{value:'Search',hintShowing:true})]),assertion('value','Search','','label')).passed,true);
+});
+test('native switch actions cannot succeed when the state does not change',async()=>{
+ const state=snapshot([node(0,'Application','Example'),node(1,'Switch','Notifications',{identifier:'notifications',checked:false,parentIndex:0})]),d=new MobileDriver({platform:'ios',app,device:'sim',baseline:'preserve'},[]);d.ready=true;let presses=0;
+ d.connection.call=async command=>{if(command==='snapshot')return state;if(command==='press'){presses++;return{verification:'confirmed'};}throw Error(command);};
+ const observation=normalizeNative(state,app,[]),control=observation.controls.find(item=>item.role==='checkbox');await assert.rejects(d.execute(observation,control,{action:'check',target:'Notifications',value:null,fixture:null},null,AbortSignal.timeout(5000)),/not confirmed/);assert.equal(presses,1);
 });
 test('Android checked evidence must match one app, identifier, class and exact bounds',()=>{
  const state=snapshot([node(0,'android.widget.Switch','Notifications',{identifier:'notifications',selected:false})]);
@@ -105,10 +111,14 @@ test('installed app IDs are not mistaken for build paths and recording fails clo
  try{
   const buildPath=join(directory,'Fixture.app');await mkdir(buildPath);const built=new MobileDriver({platform:'ios',app:buildPath,device:'sim',baseline:'preserve'},[]),buildCalls=[];built.connection.interrupt=()=>{};built.connection.call=async(command,args)=>{buildCalls.push([command,args]);if(command==='devices')return[{id:'sim',name:'Owned',platform:'ios',kind:'simulator',target:'mobile',booted:true,identifiers:{}}];if(command==='install')return{bundleId:'dev.fixture.installed'};if(command==='open')return{device:{id:'sim'},appBundleId:'dev.fixture.installed'};return{};};
   await built.open(AbortSignal.timeout(1000));await built.close();assert.equal(built.target.app,buildPath);assert.equal(built.resolvedApp,'dev.fixture.installed');assert.ok(buildCalls.some(([command,args])=>command==='install'&&args.appPath===buildPath));
-  const unsafe=makeDriver(),unsafePath=join(directory,'unsafe.mp4');unsafe.connection.call=async(command,args)=>{if(command==='record'&&args.action==='start')return{recording:'started'};if(command==='record')return{recording:'stopped',outPath:unsafePath,durationMs:1000,capturedDurationMs:1000};if(command==='snapshot')return snapshot([node(0,'TextField','Private input')]);throw Error(command);};
+  const unsafe=makeDriver(),unsafePath=join(directory,'unsafe.mp4');unsafe.connection.call=async(command,args)=>{if(command==='record'&&args.action==='start')return{recording:'started',outPath:unsafePath,showTouches:false,activeSessionApp:{bundleId:'com.example.app'}};if(command==='record')return{recording:'stopped',outPath:unsafePath,durationMs:1000,capturedDurationMs:1000,showTouches:false,recorder:'confirmed',nativePathDisposition:'retired'};if(command==='snapshot')return snapshot([node(0,'TextField','Private input')]);throw Error(command);};
   await unsafe.startRecording(unsafePath,AbortSignal.timeout(1000));await writeFile(unsafePath,'private pixels');assert.equal(await unsafe.stopRecording(AbortSignal.timeout(1000)),null);await assert.rejects(readFile(unsafePath),/ENOENT/);assert.match(unsafe.recordingDiscardedReason,/final screen/);
-  const malformed=makeDriver(),malformedPath=join(directory,'malformed.mp4');malformed.connection.call=async(command,args)=>{if(command==='record'&&args.action==='start')return{recording:'started'};if(command==='record')return{recording:'stopped',outPath:malformedPath+'.other',durationMs:1000};if(command==='snapshot')return snapshot([node(0,'Button','Done')]);throw Error(command);};
-  await malformed.startRecording(malformedPath,AbortSignal.timeout(1000));await writeFile(malformedPath,'private pixels');await assert.rejects(malformed.stopRecording(AbortSignal.timeout(1000)),/invalid artifact identity/);await malformed.close();await assert.rejects(readFile(malformedPath),/ENOENT/);
+  const malformed=makeDriver(),malformedPath=join(directory,'malformed.mp4'),unexpectedPath=join(directory,'unexpected.mp4');malformed.connection.call=async(command,args)=>{if(command==='record'&&args.action==='start')return{recording:'started',outPath:malformedPath,showTouches:false};if(command==='record'){await writeFile(unexpectedPath,'unexpected private pixels');return{recording:'stopped',outPath:unexpectedPath,durationMs:1000,showTouches:false};}if(command==='snapshot')return snapshot([node(0,'Button','Done')]);throw Error(command);};
+  await malformed.startRecording(malformedPath,AbortSignal.timeout(1000));await writeFile(malformedPath,'private pixels');await assert.rejects(malformed.stopRecording(AbortSignal.timeout(1000)),/invalid artifact identity/);await malformed.close();for(const path of [malformedPath,unexpectedPath])await assert.rejects(readFile(path),/ENOENT/);
+  const lifecycle=makeDriver(),lifecyclePath=join(directory,'lifecycle.mp4'),safeState={...snapshot([node(0,'Application','Example'),node(1,'Button','Done',{parentIndex:0})]),appBundleId:'com.example.app',identifiers:{appBundleId:'com.example.app'}};lifecycle.connection.call=async(command,args)=>{if(command==='record'&&args.action==='start')return{recording:'started',outPath:lifecyclePath,showTouches:false,recordingScope:'app',activeSessionApp:{bundleId:'com.example.app'}};if(command==='record')return{recording:'stopped',outPath:lifecyclePath,durationMs:1000,capturedDurationMs:1000,showTouches:false,recorder:'unconfirmed',nativePathDisposition:'pending'};if(command==='snapshot')return safeState;throw Error(command);};
+  await lifecycle.startRecording(lifecyclePath,AbortSignal.timeout(1000));await writeFile(lifecyclePath,'unconfirmed pixels');await assert.rejects(lifecycle.stopRecording(AbortSignal.timeout(1000)),/unsafe lifecycle evidence/);await lifecycle.close();await assert.rejects(readFile(lifecyclePath),/ENOENT/);
+  const uncertain=makeDriver(),uncertainPath=join(directory,'uncertain.mp4');uncertain.connection.call=async(command,args)=>{if(command==='record'&&args.action==='start'){await writeFile(uncertainPath,'possibly finalized pixels');throw new BlockedError('Lost start response');}throw Error(command);};
+  await assert.rejects(uncertain.startRecording(uncertainPath,AbortSignal.timeout(1000)),/Lost start response/);assert.equal(await readFile(uncertainPath,'utf8'),'possibly finalized pixels');await uncertain.close();await assert.rejects(readFile(uncertainPath),/ENOENT/);assert.match(uncertain.recordingDiscardedReason,/not confirmed/);
  }finally{await rm(directory,{recursive:true,force:true});}
 });
 test('native saved plans bind platform/app/baseline and reject altered targets or checks',async()=>{

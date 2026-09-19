@@ -1,9 +1,9 @@
 import { mkdir, chmod, unlink, stat } from 'node:fs/promises';
-import { resolve, extname } from 'node:path';
+import { resolve, extname, dirname, relative, isAbsolute, sep } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
-import { DeviceConnection, selectDevice, type NativeSnapshot } from './device.js';
+import { DeviceConnection, selectDevice, nativeToolEnvironment, type NativeSnapshot } from './device.js';
 import { redact } from './config.js';
 import { parseNumber } from './assertions.js';
 import { readAndroidChecked, androidInputFocused } from './android-state.js';
@@ -97,7 +97,8 @@ export class MobileDriver {
   private ready = false;
   private recording = false;
   private recordingPath?: string;
-  recordingMetrics?: { durationMs: number; capturedDurationMs?: number; backend?: string };
+  private recordingArtifacts = new Set<string>();
+  recordingMetrics?: { durationMs: number; capturedDurationMs?: number; backend?: string; recorder?: 'confirmed'; nativePathDisposition?: 'retirable' | 'retired' };
   recordingDiscardedReason?: string;
   constructor(target: NativeTarget, private secrets: string[]) {
     this.target = target; this.connection = new DeviceConnection(target.platform);
@@ -165,7 +166,7 @@ export class MobileDriver {
         const empty = await this.observe(signal), inputs = empty.controls.filter(item => item.identifier === node.identifier && item.role === 'textbox');
         if (inputs.length !== 1) throw new BlockedError('Android input changed after clearing.');
         const input = empty.nodes.get(inputs[0].id)!;
-        if ((input.hintShowing === true ? '' : input.value) !== '' || !await androidInputFocused(input, this.target.device, this.target.app, signal)) throw new BlockedError('Android input could not confirm empty text and focus. No typing was dispatched.');
+        if ((input.hintShowing === true ? '' : input.value) !== '' || !await androidInputFocused(input, this.target.device, this.appIdentity, signal)) throw new BlockedError('Android input could not confirm empty text and focus. No typing was dispatched.');
         await this.connection.call('type', { text: value, settle: true, settleQuietMs: 100, timeoutMs: 1500 }, signal, 20000);
         const verified = await this.check({kind:'value', target:{by:'id',text:node.identifier,role:null,within:null},expected:value}, signal);
         if (!verified.passed) throw new BlockedError('Android replacement was unconfirmed. It was not repeated.');
@@ -177,7 +178,12 @@ export class MobileDriver {
       if (filled.verification === 'unconfirmed') throw new BlockedError('Native fill could not confirm the requested text. It was not repeated.');
     } else if (step.action === 'check' || step.action === 'uncheck') {
       if (current.checked === null) throw new BlockedError('Native switch state is unavailable.');
-      if (current.checked !== (step.action === 'check')) await this.connection.call('press', options, signal, 10000);
+      const expected = step.action === 'check';
+      if (current.checked !== expected) {
+        await this.connection.call('press', options, signal, 10000);
+        const verified = await this.check({ kind: 'checked', target: { by: node.identifier ? 'id' : 'label', text: node.identifier ?? current.label, role: null, within: null }, expected }, signal);
+        if (!verified.passed) throw new BlockedError('Native switch change was not confirmed. It was not repeated.');
+      }
     } else if (step.action === 'click') await this.connection.call('press', options, signal, 10000);
     else throw new BlockedError('Incompatible native control action.');
     signal.throwIfAborted();
@@ -209,9 +215,24 @@ export class MobileDriver {
     return result!;
   }
   async startRecording(path: string, signal: AbortSignal): Promise<void> {
-    await mkdir(resolve(path, '..'), { recursive: true, mode: 0o700 });
-    await this.connection.call('record', { action: 'start', path, quality: 'medium', hideTouches: true }, signal, 15000);
-    this.recording = true; this.recordingPath = path; this.recordingMetrics = undefined; this.recordingDiscardedReason = undefined;
+    const expected = resolve(path);
+    await mkdir(dirname(expected), { recursive: true, mode: 0o700 });
+    // Remember ownership before dispatch. A canceled or timed-out start can
+    // still have begun recording on the device; close() removes any clip that
+    // the SDK finalizes while releasing the session.
+    this.recordingArtifacts.clear(); this.recordingArtifacts.add(expected);
+    this.recording = true; this.recordingPath = expected; this.recordingMetrics = undefined; this.recordingDiscardedReason = undefined;
+    try {
+      const result = await this.connection.call('record', { action: 'start', path: expected, quality: 'medium', hideTouches: true }, signal, 15000);
+      const returned = typeof result?.outPath === 'string' ? resolve(result.outPath) : null;
+      const child = returned ? relative(dirname(expected), returned) : null;
+      if (returned && extname(returned).toLowerCase() === '.mp4' && child !== null && !isAbsolute(child) && child !== '..' && !child.startsWith(`..${sep}`)) this.recordingArtifacts.add(returned);
+      if (result?.recording !== 'started' || returned !== expected || result.showTouches !== false || result.recordingScope !== undefined && result.recordingScope !== 'app' || result.activeSessionApp !== undefined && result.activeSessionApp?.bundleId !== this.appIdentity) {
+        this.recordingDiscardedReason = 'Recording start returned unsafe or mismatched scope/path evidence. Owned artifacts are discarded when the native session closes.';
+        throw new BlockedError('Native recorder did not confirm the requested app-scoped, touch-hidden output.');
+      }
+    }
+    catch (error) { this.recordingDiscardedReason = 'Recording start was not confirmed. The owned artifact is discarded when the native session closes.'; throw error; }
   }
   async stopRecording(signal: AbortSignal): Promise<string | null> {
     if (!this.recording) return null;
@@ -225,17 +246,32 @@ export class MobileDriver {
   private async finishRecording(signal: AbortSignal, safe: boolean): Promise<string | null> {
     const result = await this.connection.call('record', { action: 'stop' }, signal, 20000);
     const path = this.recordingPath;
-    if (result?.recording !== 'stopped' || !path || typeof result.outPath !== 'string' || resolve(result.outPath) !== resolve(path)) throw new BlockedError('Native recorder returned an invalid artifact identity.');
-    if (!Number.isFinite(result.durationMs) || result.durationMs <= 0 || result.capturedDurationMs !== undefined && (!Number.isFinite(result.capturedDurationMs) || result.capturedDurationMs <= 0)) throw new BlockedError('Native recorder produced no usable timeline.');
-    await chmod(path, 0o600);
-    this.recordingMetrics = { durationMs: result.durationMs, ...(result.capturedDurationMs === undefined ? {} : {capturedDurationMs:result.capturedDurationMs}), ...(result.recordingBackend ? {backend:result.recordingBackend} : {}) };
-    this.recording = false;
-    if (!safe) {
-      await unlink(path).catch(() => {}); this.recordingPath = undefined;
-      this.recordingDiscardedReason = 'Recording was discarded because the final screen was unsafe or could not be verified.';
-      return null;
+    const returned = typeof result?.outPath === 'string' ? resolve(result.outPath) : null;
+    const expected = path ? resolve(path) : null;
+    const withinOwnedDirectory = expected && returned ? (() => { const child = relative(dirname(expected), returned); return extname(returned).toLowerCase() === '.mp4' && !isAbsolute(child) && child !== '..' && !child.startsWith(`..${sep}`); })() : false;
+    if (withinOwnedDirectory && returned) this.recordingArtifacts.add(returned);
+    if (result?.recording !== 'stopped' || !expected || returned !== expected) {
+      this.recordingDiscardedReason = returned && !withinOwnedDirectory ? 'Recorder returned a path outside the approved recording directory. It was not published or deleted automatically.' : 'Recorder returned an invalid artifact identity. Owned recording files were discarded.';
+      await this.discardOwnedRecordings();
+      throw new BlockedError('Native recorder returned an invalid artifact identity. Owned recording files were discarded; an external returned path is never deleted automatically.');
     }
-    return path;
+    if (!Number.isFinite(result.durationMs) || result.durationMs <= 0 || result.capturedDurationMs !== undefined && (!Number.isFinite(result.capturedDurationMs) || result.capturedDurationMs <= 0)) {
+      this.recordingDiscardedReason = 'Recorder produced no usable timeline. Owned recording files were discarded.'; await this.discardOwnedRecordings();
+      throw new BlockedError('Native recorder produced no usable timeline.');
+    }
+    if (result.showTouches !== false || result.recordingScope !== undefined && result.recordingScope !== 'app' || result.activeSessionApp !== undefined && result.activeSessionApp?.bundleId !== this.appIdentity || result.recorder !== undefined && result.recorder !== 'confirmed' || result.nativePathDisposition === 'pending') {
+      this.recordingDiscardedReason = 'Recorder termination, app scope, or native-path safety was not confirmed. Owned recording files were discarded.';
+      await this.discardOwnedRecordings();
+      throw new BlockedError('Native recorder returned unsafe lifecycle evidence. The clip was discarded.');
+    }
+    if (!safe) {
+      this.recordingDiscardedReason = 'Recording was discarded because the final screen was unsafe or could not be verified.';
+      await this.discardOwnedRecordings(); this.recording = false; this.recordingPath = undefined; return null;
+    }
+    await chmod(expected, 0o600);
+    this.recordingMetrics = { durationMs: result.durationMs, ...(result.capturedDurationMs === undefined ? {} : {capturedDurationMs:result.capturedDurationMs}), ...(result.recordingBackend ? {backend:result.recordingBackend} : {}), ...(result.recorder === 'confirmed' ? {recorder:result.recorder} : {}), ...(['retirable','retired'].includes(result.nativePathDisposition) ? {nativePathDisposition:result.nativePathDisposition as 'retirable' | 'retired'} : {}) };
+    this.recording = false; this.recordingArtifacts.clear();
+    return expected;
   }
   async screenshot(path: string, signal: AbortSignal): Promise<boolean> {
     // Conservatively omit pixels when any private field/known secret is visible.
@@ -255,22 +291,24 @@ export class MobileDriver {
     return raw;
   }
   get resolvedApp(): string { return this.appIdentity; }
+  private async discardOwnedRecordings(): Promise<void> {
+    const failed: string[] = [];
+    for (const path of this.recordingArtifacts) try { await unlink(path); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') failed.push(path); }
+    if (failed.length) throw new BlockedError('An unsafe native recording could not be removed from the owned output directory. It was not published.');
+    this.recordingArtifacts.clear();
+  }
   async close(): Promise<void> {
     try {
       if (this.opened) { await this.connection.close(); this.opened = false; this.ready = false; }
       else this.connection.interrupt();
     } finally {
-      if (this.recordingPath && this.recording) { await unlink(this.recordingPath).catch(() => {}); this.recording = false; }
+      if (this.recording) { try { await this.discardOwnedRecordings(); } finally { this.recording = false; this.recordingPath = undefined; } }
     }
   }
 }
-export function nativeMetadataEnvironment(environment: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
-  const allowed = ['PATH', 'HOME', 'TMPDIR', 'ANDROID_HOME', 'ANDROID_SDK_ROOT', 'JAVA_HOME', 'DEVELOPER_DIR', 'LANG', 'LC_ALL'];
-  return Object.fromEntries(allowed.flatMap(name => environment[name] === undefined ? [] : [[name, environment[name]]]));
-}
 export async function nativeVersions(target: NativeTarget, signal: AbortSignal): Promise<Record<string, string>> {
   signal.throwIfAborted();
-  const execute = promisify(execFile), command = { timeout: 3000, signal, env: nativeMetadataEnvironment() };
+  const execute = promisify(execFile), command = { timeout: 3000, signal, env: nativeToolEnvironment() };
   const versions: Record<string, string> = { backend: 'agent-device@0.21.6', node: process.version, platform: target.platform, app: target.app, device: target.device };
   try {
     if (target.platform === 'ios') {

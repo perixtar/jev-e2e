@@ -1,5 +1,5 @@
-// SDK requests have no AbortSignal. Exiting this owned process closes the RPC
-// connection; the daemon cancels that request. Session cleanup uses a new worker.
+// SDK requests have no AbortSignal. Cancellation asks this same owning client
+// to close its session, then terminates the isolated RPC process by deadline.
 import { createAgentDeviceClient } from 'agent-device';
 
 let client: ReturnType<typeof createAgentDeviceClient>;

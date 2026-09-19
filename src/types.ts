@@ -62,7 +62,7 @@ export type CaseResult = {
   checks: CheckResult[]; actions: { step: number; action: string; target: string; replay: boolean }[];
   durationMs: number; screenshot: string | null; flow: FlowAction[];
   video?: string | null;
-  videoMetadata?: { durationMs: number; capturedDurationMs?: number; backend?: string };
+  videoMetadata?: { durationMs: number; capturedDurationMs?: number; backend?: string; recorder?: 'confirmed'; nativePathDisposition?: 'retirable' | 'retired' };
   evidenceNotes?: string[];
 };
 export type ModelStats = { requests: number; plannerRequests: number; jevRequests: number; cost: number; models: string[] };
@@ -79,6 +79,14 @@ export type Progress = { type: string; message: string; caseName?: string; step?
 
 export class BlockedError extends Error { constructor(message: string) { super(message); this.name = 'BlockedError'; } }
 
+export function unsupportedNativeMutation(text: string): boolean {
+  return /\b(?:buy(?:\s+now)?|checkout|check\s+out|place\s+(?:an\s+)?order|order\s+now|pay(?:ment)?|purchase|transfer|wire|send|donate|tip|subscribe|book\s+now)\b/i.test(text);
+}
+
+export function sensitiveInputTarget(text: string): boolean {
+  return /\b(?:password|passcode|pass\s*phrase|pin|otp|one[- ]time(?:\s+(?:password|code))?|verification\s+code|security\s+code|credit\s+card|card\s+number|cvv|cvc|social\s+security(?:\s+number)?|ssn|token|secret|api.?key|e-?mail|user\s*name)\b/i.test(text);
+}
+
 export function validateSuite(input: unknown): Suite {
   const parsed = SuiteSchema.safeParse(input);
   if (!parsed.success) throw new BlockedError('Invalid test specification. Recompile the cases or check the saved plan schema.');
@@ -90,10 +98,11 @@ export function validateSuite(input: unknown): Suite {
       if (!['reload', 'relaunch', 'back', 'keyboard'].includes(step.action) && !step.target?.trim()) throw new BlockedError(`Case "${test.name}" has an action without a target.`);
       if (parsed.data.version === 1 && ['relaunch', 'back', 'keyboard', 'scroll'].includes(step.action)) throw new BlockedError('Native actions require a version-2 mobile plan.');
       if (parsed.data.version === 2 && ['reload', 'select'].includes(step.action)) throw new BlockedError('Native apps use Relaunch and observed option buttons. Web Reload/Select are unsupported.');
+      if (parsed.data.version === 2 && step.action === 'click' && unsupportedNativeMutation(step.target ?? '')) throw new BlockedError('Payment, ordering, transfer, and message-sending actions are unsupported in native tests.');
       if (step.action === 'scroll' && !['up', 'down', 'left', 'right'].includes(step.target ?? '')) throw new BlockedError('Scroll direction must be up, down, left, or right. Each step scrolls once.');
       if (['fill', 'select'].includes(step.action) && ((step.value === null) === (step.fixture === null))) throw new BlockedError('Each input needs exactly one literal value or fixture reference.');
       if (!['fill', 'select'].includes(step.action) && (step.value !== null || step.fixture !== null)) throw new BlockedError('Only fill/select actions accept input values.');
-      if (step.value !== null && /password|secret|token|api.?key|email/i.test(step.target ?? '')) throw new BlockedError('Use a fixture reference for credential inputs so their values stay out of model prompts and reports.');
+      if (step.value !== null && sensitiveInputTarget(step.target ?? '')) throw new BlockedError('Use a fixture reference for private inputs so their values stay out of model prompts and reports.');
     }
     for (const assertion of test.assertions) {
       if (parsed.data.version === 1 && (assertion.afterStep !== undefined || assertion.target?.by === 'id')) throw new BlockedError('Native milestones/identifiers require a version-2 plan.');

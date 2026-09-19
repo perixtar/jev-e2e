@@ -2,6 +2,9 @@
 import {parseArgs} from 'node:util';
 import {readFile,writeFile,mkdir} from 'node:fs/promises';
 import {resolve,join} from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {execFile} from 'node:child_process';
+import {promisify} from 'node:util';
 import {runSuite,savedHash} from '../dist/runner.js';
 import {loadEnvironment} from '../dist/config.js';
 import {startLab} from '../examples/mobile-app/control.mjs';
@@ -10,6 +13,9 @@ if(!values.live)throw Error('Paid native evaluation requires --live. Use npm tes
 const rounds=Number(values.rounds),cap=Number(values['max-cost']);
 if(!Number.isInteger(rounds)||rounds<1||rounds>10||!Number.isFinite(cap)||cap<=0||cap>10)throw Error('rounds 1–10, aggregate max-cost (0,10].');
 loadEnvironment();if(!process.env.OPENROUTER_API_KEY)throw Error('Set OPENROUTER_API_KEY.');
+const repo=resolve(fileURLToPath(new URL('..',import.meta.url))),execute=promisify(execFile);
+const [{stdout:implementationSha},{stdout:dirty}]=await Promise.all([execute('git',['rev-parse','HEAD'],{cwd:repo}),execute('git',['status','--porcelain'],{cwd:repo})]);
+if(dirty.trim())throw Error('Commit the implementation before a release-gate evaluation so every trial has an exact package SHA.');
 const platforms=values.platform==='both'?['ios','android']:[values.platform];
 if(platforms.some(p=>!['ios','android'].includes(p)||!values[`${p}-device`]))throw Error('Pass --ios-device and/or --android-device with exact virtual-device IDs.');
 const directory=resolve(values.out??join('.jev-e2e','mobile-evaluation',new Date().toISOString().replaceAll(':','-')));await mkdir(directory,{recursive:true,mode:0o700});
@@ -19,7 +25,7 @@ const faults=['invalid-login','wrong-filter','wrong-total','ineffective-removal'
 const lab=await startLab(),trials=[],replays={};let spent=0;
 const controller=new AbortController(),stop=()=>controller.abort();process.once('SIGINT',stop);process.once('SIGTERM',stop);
 let writing=Promise.resolve();
-const persist=()=>{const data=JSON.stringify({date:new Date().toISOString(),cap,spent,trials},null,2);writing=writing.then(()=>writeFile(join(directory,'trials.json'),data,{mode:0o600}));return writing;};
+const persist=()=>{const data=JSON.stringify({date:new Date().toISOString(),implementationSha:implementationSha.trim(),cap,spent,trials},null,2);writing=writing.then(()=>writeFile(join(directory,'trials.json'),data,{mode:0o600}));return writing;};
 async function matrix(platform){
   for(const mode of ['healthy','broken','replay'])for(let round=1;round<=rounds;round++){
     if(controller.signal.aborted)return;
@@ -36,7 +42,7 @@ async function matrix(platform){
       check.assertion.target?.text==='Your cart is empty'&&check.observed===false,
       check.assertion.target?.text==='Desk Lamp'&&check.assertion.afterStep===6&&check.observed===false,
     ][index])):[];
-    spent+=result.model.cost;trials.push({platform,mode,round,baselines,baselineVerified,correctFaults,result});
+    spent+=result.model.cost;trials.push({implementationSha:implementationSha.trim(),platform,mode,round,baselines,baselineVerified,correctFaults,result});
     if(mode==='healthy'&&result.verdict==='PASS'&&!replays[platform]){const flows=result.cases.map(c=>c.flow);replays[platform]={version:2,plan:result.plan,target:result.target,hash:savedHash(result.plan,result.target,flows),flows};}
     await persist();
     if(controller.signal.aborted)return;
@@ -52,10 +58,12 @@ try{
       const counts=Object.fromEntries(['PASS','FAIL','BLOCKED'].map(v=>[v,cases.filter(c=>c.verdict===v).length]));
       if(mode==='broken')counts.correctFAIL=runs.flatMap(t=>t.correctFaults).filter(Boolean).length;
       const perFlow=Array.from({length:5},(_,i)=>runs.filter(t=>t.result.cases[i]?.verdict===(mode==='broken'?'FAIL':'PASS')).length);
-      const durations=cases.map(c=>c.durationMs).sort((a,b)=>a-b);return [mode,{...counts,perFlow,medianMs:durations[Math.floor(durations.length/2)],modelCost:runs.reduce((n,t)=>n+t.result.model.cost,0),plannerRequests:runs.reduce((n,t)=>n+t.result.model.plannerRequests,0),jevRequests:runs.reduce((n,t)=>n+t.result.model.jevRequests,0)}];
+      const durations=cases.map(c=>c.durationMs).sort((a,b)=>a-b),warmDurations=runs.filter(t=>t.round>1).flatMap(t=>t.result.cases.map(c=>c.durationMs)).sort((a,b)=>a-b);
+      const percentile=(values,p)=>values.length?values[Math.min(values.length-1,Math.ceil(values.length*p)-1)]:null;
+      return [mode,{...counts,perFlow,medianMs:percentile(durations,.5),p95Ms:percentile(durations,.95),warmMedianMs:percentile(warmDurations,.5),modelCost:runs.reduce((n,t)=>n+t.result.model.cost,0),plannerRequests:runs.reduce((n,t)=>n+t.result.model.plannerRequests,0),jevRequests:runs.reduce((n,t)=>n+t.result.model.jevRequests,0)}];
     }));
     const verified=trials.filter(t=>t.platform===platform).every(t=>t.baselineVerified);
-    const passed=verified&&rounds===10&&groups.healthy.PASS>=48&&groups.healthy.perFlow.every(n=>n>=9)&&groups.broken.PASS===0&&groups.broken.correctFAIL>=48&&groups.replay.PASS>=48&&groups.replay.plannerRequests===0;
+    const passed=verified&&rounds===10&&groups.healthy.PASS>=48&&groups.healthy.perFlow.every(n=>n>=9)&&groups.healthy.warmMedianMs!==null&&groups.healthy.warmMedianMs<=60000&&groups.broken.PASS===0&&groups.broken.correctFAIL>=48&&groups.replay.PASS>=48&&groups.replay.plannerRequests===0;
     return {platform,passed,groups};
-  });await writeFile(join(directory,'summary.json'),JSON.stringify({summary,spent,directory,canceled:controller.signal.aborted},null,2),{mode:0o600});console.log(JSON.stringify({summary,spent,directory},null,2));process.exitCode=controller.signal.aborted?130:summary.every(s=>s.passed)?0:1;
+  });await writeFile(join(directory,'summary.json'),JSON.stringify({implementationSha:implementationSha.trim(),summary,spent,canceled:controller.signal.aborted},null,2),{mode:0o600});console.log(JSON.stringify({implementationSha:implementationSha.trim(),summary,spent,directory},null,2));process.exitCode=controller.signal.aborted?130:summary.every(s=>s.passed)?0:1;
 }finally{process.removeListener('SIGINT',stop);process.removeListener('SIGTERM',stop);await persist();await lab.close();}
