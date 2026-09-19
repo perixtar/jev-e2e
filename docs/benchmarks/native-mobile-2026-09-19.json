@@ -4,7 +4,7 @@
   "fixture": "examples/mobile-app (Jev Shop)",
   "cases": "examples/mobile.cases",
   "provider": "OpenRouter",
-  "evaluation": "Five cases × ten first attempts per mode and platform; no retries or omitted trials.",
+  "evaluation": "Five cases × ten first attempts per mode and platform within two isolated registered 30-suite cohorts; no retries or omitted trials within those cohorts. Earlier host/SDK diagnostic attempts are excluded.",
   "aggregate": [
     {
       "platform": "ios",
