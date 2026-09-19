@@ -8,13 +8,23 @@
 [![Node: 22.12+](https://img.shields.io/badge/node-22.12%2B-339933)](https://nodejs.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-[Quick start](#quick-start) · [Native mobile](docs/MOBILE.md) · [Write a test](#write-a-test) · [Benchmarks](#live-ebay-benchmark) · [CLI reference](docs/USAGE.md) · [Contribute](CONTRIBUTING.md)
+[Quick start](#quick-start) · [Native mobile](docs/MOBILE.md) · [Write a test](#write-a-test) · [Results](MOBILE_TEST_RESULTS.md) · [CLI reference](docs/USAGE.md) · [Contribute](CONTRIBUTING.md)
 
 </div>
 
 Describe a flow and what should be true. jev-e2e turns it into a test plan, uses Jev to select accessible controls, and runs it with Playwright or a local simulator/emulator. Each result is **PASS**, **FAIL**, or **BLOCKED**, with an HTML report, JSON, and privacy-aware evidence.
 
 **Local alpha:** CLI and workbench for Chromium websites, iOS Simulator, and Android Emulator. Install from source; an npm release is not yet available.
+
+## Watch one test on iOS and Android
+
+<a href="docs/assets/mobile-demo-10s.mp4"><img src="docs/assets/mobile-demo-poster.jpg" alt="Jev Shop native test on a large iOS simulator screen with elapsed time and billed Jev cost" width="420"></a>
+
+[Watch the 10-second edit](docs/assets/mobile-demo-10s.mp4) · [Watch the real-time recorded segments](docs/assets/mobile-demo-real-time.mp4) · [Read the native setup](docs/MOBILE.md)
+
+One authored case signs in, searches for a lamp, adds it to the cart, changes the quantity, checks the total, relaunches, verifies persistence, removes it, and enables notifications. The same React Native fixture ran on **iOS Simulator and Android Emulator**; all **12 explicit checks passed** on each recorded run. The timers and billed Jev costs come from those runs. The short edit speeds up the iOS and Android footage separately, while the second video plays the shareable recorded segments in real time. Screens with input fields (including sign-in and search) and transient relaunch screens are excluded for privacy, so the footage has capture cuts. These two runs are a demonstration; repeated reliability results are reported separately in [native validation](MOBILE_TEST_RESULTS.md).
+
+In a separate controlled evaluation of five cases × ten first attempts per mode and platform, healthy runs passed **50/50** on each device, seeded faults produced **50/50 correct FAIL** on each, and saved replay passed **50/50** on each. iOS replay used Jev to repair 30 stale controls; Android replay used no model calls. See the [method, cost, timing, and limitations](MOBILE_TEST_RESULTS.md) and [all 300 sanitized case results](docs/benchmarks/native-mobile-2026-09-19.json).
 
 ## Watch the eBay comparison
 
@@ -29,7 +39,7 @@ This is a UI execution experiment with a shared human-authored plan and an exten
 ## Why jev-e2e?
 
 - **Write cases in plain English.** Use an optional planner for prose, or explicit `Goal`, `Step`, and `Expect` templates without it.
-- **Check the outcome.** Playwright verifies expectations independently. Missing evidence or unsupported requirements produce BLOCKED.
+- **Check the outcome.** The runner verifies expectations independently of Jev's choices. Missing evidence or unsupported requirements produce BLOCKED.
 - **See what happened.** Reports include expected and observed values, actions, timing, provider usage, and screenshots.
 - **Replay successful flows.** Reuse saved controls and recheck assertions. An unchanged flow can replay with zero model calls; stale targets require Jev to repair them.
 - **Run locally with limits.** Use your own OpenRouter key, authentication fixtures, request limits, deadlines, and cost budget. Stop execution from the workbench or with Ctrl+C.
@@ -84,12 +94,15 @@ Open the printed workbench URL, normally **http://127.0.0.1:4007**. Point it at 
 
 ### 5. Test a native app
 
-    node dist/cli.js doctor --platform ios
-    node dist/cli.js devices --platform ios
-    node dist/cli.js run --platform ios --device EXACT_ID \
-      --app com.example.app --cases mobile.cases --fixtures fixtures.json
+```sh
+node dist/cli.js doctor --platform ios
+node dist/cli.js devices --platform ios
+node dist/cli.js plan --platform ios --app com.example.app \
+  --cases mobile.cases --fixtures fixtures.json --out reviewed.json
+node dist/cli.js run --plan reviewed.json --device EXACT_ID
+```
 
-Native tests use the same case, review, replay, and report flow. The first release supports local iOS Simulator and Android Emulator targets with accessible native or React Native controls. See the [native setup and case reference](docs/MOBILE.md).
+Replace `ios` with `android` for an Android Emulator. Native tests use the same case, review, replay, and report flow; the local app needs accessible controls. Explicit `Step:` lines bypass the optional prose planner; `--planner off` makes that choice explicit. See the [native setup and case reference](docs/MOBILE.md).
 
 ## Write a test
 

@@ -65,7 +65,8 @@ try{
       return [mode,{...counts,perFlow,medianMs:percentile(durations,.5),p95Ms:percentile(durations,.95),warmMedianMs:percentile(warmDurations,.5),artifactMs:runs.reduce((n,t)=>n+(t.result.timings?.artifact??0),0),modelCost:runs.reduce((n,t)=>n+t.result.model.cost,0),plannerRequests:runs.reduce((n,t)=>n+t.result.model.plannerRequests,0),jevRequests:runs.reduce((n,t)=>n+t.result.model.jevRequests,0)}];
     }));
     const verified=trials.filter(t=>t.platform===platform).every(t=>t.baselineVerified);
-    const passed=verified&&rounds===10&&groups.healthy.PASS>=48&&groups.healthy.perFlow.every(n=>n>=9)&&groups.healthy.warmMedianMs!==null&&groups.healthy.warmMedianMs<=60000&&groups.healthy.artifactMs>0&&groups.broken.PASS===0&&groups.broken.correctFAIL>=48&&groups.replay.PASS>=48&&groups.replay.plannerRequests===0&&groups.replay.jevRequests===0;
+    // A stale saved control may use Jev for semantic repair; replay must skip prose planning.
+    const passed=verified&&rounds===10&&groups.healthy.PASS>=48&&groups.healthy.perFlow.every(n=>n>=9)&&groups.healthy.warmMedianMs!==null&&groups.healthy.warmMedianMs<=60000&&groups.healthy.artifactMs>0&&groups.broken.PASS===0&&groups.broken.correctFAIL>=48&&groups.replay.PASS>=48&&groups.replay.plannerRequests===0;
     return {platform,passed,groups};
   });await writeFile(join(directory,'summary.json'),JSON.stringify({implementationSha:implementationSha.trim(),summary,spent,canceled:controller.signal.aborted},null,2),{mode:0o600});console.log(JSON.stringify({implementationSha:implementationSha.trim(),summary,spent,directory},null,2));process.exitCode=controller.signal.aborted?130:summary.every(s=>s.passed)?0:1;
 }finally{process.removeListener('SIGINT',stop);process.removeListener('SIGTERM',stop);await persist();await lab.close();}
