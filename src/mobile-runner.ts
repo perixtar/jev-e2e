@@ -85,14 +85,24 @@ export async function runMobileSuite(options: RunOptions): Promise<SuiteResult> 
             catch (error) { if (dispatched) result.actions.push({ ...action, outcome: 'uncertain' }); throw error; }
             result.flow.push({ step: stepIndex, navigation: false, control: null }); complete = true; continue;
           }
-          const observation = await timed('observation', () => driver.observe(caseSignal));
+          let observation = await timed('observation', () => driver.observe(caseSignal));
           let control: Control | undefined, navigation = false, replay = false;
           while (cached[cacheIndex] && cached[cacheIndex].step < stepIndex) cacheIndex++;
           const remembered = cached[cacheIndex]?.step === stepIndex ? cached[cacheIndex++] : undefined;
           if (remembered?.control) {
-            const matches = observation.controls.filter(item => JSON.stringify(semantic(item)) === JSON.stringify(remembered.control));
+            const match = (controls: Control[]) => controls.filter(item => JSON.stringify(semantic(item)) === JSON.stringify(remembered.control));
+            let matches = match(observation.controls);
+            // A relaunch can briefly expose healthy text but no actionable
+            // controls. Reobserve the exact saved fingerprint before asking
+            // Jev to repair a target that may simply be late to appear.
+            const deadline = Date.now() + 3000;
+            while (!matches.length && Date.now() < deadline) {
+              await delay(200, undefined, { signal: caseSignal });
+              observation = await timed('observation', () => driver.observe(caseSignal));
+              matches = match(observation.controls);
+            }
             if (matches.length > 1) throw new BlockedError('Saved native target is ambiguous.');
-            control = matches[0]; navigation = remembered.navigation; replay = Boolean(control);
+            control = matches[0]; if (control) { navigation = remembered.navigation; replay = true; }
           }
           if (!control) {
             const selection = await timed('model', () => options.decide ? options.decide(observation, step, caseSignal) : decide(observation, step, provider, caseSignal));

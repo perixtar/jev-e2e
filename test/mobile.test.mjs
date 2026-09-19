@@ -165,6 +165,24 @@ test('bounded native controls round-trip through the generated replay plan',asyn
     const saved=await readSavedPlan(join(directory,'plan.json'));assert.equal(saved.flows[0][0].control.label.length,240);assert.equal(saved.flows[0][0].control.identifier.length,300);
   }finally{await rm(directory,{recursive:true,force:true});}
 });
+test('saved native replay waits for a late control after relaunch without calling Jev',async()=>{
+ const visible=normalizeNative(snapshot([node(0,'Application','Example'),node(1,'Button','Cart',{identifier:'cart',parentIndex:0})]),app,[]);
+ const control=visible.controls[0],semantic={tag:control.tag,role:control.role,label:control.label,context:control.context,type:control.type,identifier:control.identifier};
+ const plan={version:2,platform:'android',cases:[{name:'Saved cart',source:'Case: Saved cart',goal:'Verify cart after restart',auth:null,steps:[{action:'relaunch',target:null,value:null,fixture:null},{action:'click',target:'Cart',value:null,fixture:null}],assertions:[{...assertion('visible','Done',true),afterStep:1}],blockedReason:null}]};
+ const target={platform:'android',app,device:'sim',baseline:'preserve'},flows=[[{step:0,navigation:false,control:null},{step:1,navigation:false,control:semantic}]];
+ const replay={version:2,plan,target,flows,hash:savedHash(plan,target,flows)};
+ const methods=['open','direct','observe','execute','check','close'],original=Object.fromEntries(methods.map(name=>[name,MobileDriver.prototype[name]]));let snapshots=0,presses=0,modelCalls=0;
+ try{
+  MobileDriver.prototype.open=async function(){this.ready=true;};
+  MobileDriver.prototype.direct=async()=>{};
+  MobileDriver.prototype.observe=async()=>++snapshots<=2?{...visible,controls:[]}:visible;
+  MobileDriver.prototype.execute=async(_observation,selected,_step,_value,_signal,onDispatch)=>{assert.equal(selected.identifier,'cart');presses++;onDispatch();};
+  MobileDriver.prototype.check=async expected=>({assertion:expected,passed:true,observed:true});
+  MobileDriver.prototype.close=async()=>{};
+  const result=await runSuite({replay,platform:'android',app,device:'sim',outputDirectory:false,decide:async()=>{modelCalls++;throw Error('Late control must replay without Jev.');}});
+  assert.equal(result.verdict,'PASS',JSON.stringify({reason:result.cases.map(test=>test.reason),snapshots,presses,modelCalls,actions:result.cases[0].actions}));assert.equal(result.model.requests,0);assert.equal(modelCalls,0);assert.equal(presses,1);assert.equal(snapshots,3);assert.equal(result.cases[0].actions[1].replay,true);
+ }finally{for(const name of methods)MobileDriver.prototype[name]=original[name];}
+});
 test('rejected private mobile prose is redacted from every persisted report artifact',async()=>{
   const directory=await mkdtemp(join(tmpdir(),'jev-native-private-source-')),secret='correct-horse-private-9173';let requests=0;
   try{
