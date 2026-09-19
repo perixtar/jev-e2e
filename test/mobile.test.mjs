@@ -121,6 +121,14 @@ test('native normalization omits field values and masks known secrets without in
   const bounded=normalizeNative(snapshot([node(0,'Application','Example'),node(1,'Button','L'.repeat(260),{type:'Button'+'T'.repeat(44),identifier:'I'.repeat(320),parentIndex:0})]),app,[]).controls[0];
   assert.deepEqual([bounded.label.length,bounded.type.length,bounded.identifier.length],[240,40,300]);
 });
+test('a transient decorative ancestor does not change a uniquely named native target',async()=>{
+ const early=normalizeNative(snapshot([node(0,'Application','Jev Shop'),node(1,'Button','Cart',{identifier:'Cart',parentIndex:0})]),app,[]);
+ const later=snapshot([node(0,'Application','Jev Shop'),node(1,'StaticText','◆',{parentIndex:0}),node(2,'Button','Cart',{identifier:'Cart',parentIndex:1})]);
+ const control=early.controls[0],fresh=normalizeNative(later,app,[]).controls[0];assert.equal(control.context,'Jev Shop');assert.equal(control.fingerprint,fresh.fingerprint);
+ const named=normalizeNative(snapshot([node(0,'Application','Jev Shop'),node(1,'StaticText','Another record',{parentIndex:0}),node(2,'Button','Cart',{identifier:'Cart',parentIndex:1})]),app,[]).controls[0];assert.notEqual(control.fingerprint,named.fingerprint);
+ const driver=new MobileDriver({platform:'ios',app,device:'sim',baseline:'preserve'},[]);driver.ready=true;driver.connection.interrupt=()=>{};let presses=0;driver.connection.call=async command=>{if(command==='snapshot')return later;if(command==='press'){presses++;return{};}throw Error(command);};
+ await driver.execute(early,control,{action:'click',target:'Cart',value:null,fixture:null},null,AbortSignal.timeout(1000));assert.equal(presses,1);await driver.close();
+});
 test('native global actions verify the owned app surface before dispatch',async()=>{
   for(const action of ['back','scroll']){const driver=new MobileDriver({platform:'ios',app,device:'sim',baseline:'preserve'},[]);driver.ready=true;let mutations=0,snapshots=0;driver.connection.call=async command=>{if(command==='snapshot'){snapshots++;return{...snapshot([node(0,'Application','Example'),node(1,'Button','Allow',{parentIndex:0})]),systemSurfaceOnly:true};}if(command===action){mutations++;return{};}throw Error(command);};await assert.rejects(driver.direct({action,target:action==='scroll'?'down':null,value:null,fixture:null},AbortSignal.timeout(1000)),/operating system/);assert.equal(snapshots,1);assert.equal(mutations,0);await driver.close();}
 });
