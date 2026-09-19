@@ -66,6 +66,7 @@ Step lines are the action contract; Goal is a summary. Named Goal actions must m
 Mobile steps: Tap, Fill, Check/Uncheck, Scroll down/up/left/right, Back,
 Dismiss keyboard, Wait for text, Relaunch. Relaunch preserves app data.
 Mobile runs never reset an app automatically; supply your test baseline yourself.
+Saved build-path replays pin the installed bundle/package ID, even when the file at that path changes.
 --record opts into local video and excludes credential-entry segments.
 --out DIR saves JSON, HTML, a replay plan, and eligible images/video.
 Limits: --timeout MS (60000), --max-actions N (30), --max-requests N (100),

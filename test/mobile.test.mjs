@@ -45,6 +45,13 @@ test('native cases preserve every action, fixture and intermediate milestone; we
   for(const source of ['Case: Private\nGoal: Password\nhunter2\nExpect: text "Welcome" is visible','Case: Password\nhunter2\nGoal: Inspect status\nExpect: text "Welcome" is visible','Case: Private\nGoal: Password\nhunter2, tap "Sign in".\nExpect: text "Welcome" is visible','Case: Negation\nGoal: Never\ntap "Add to cart".\nExpect: text "Quantity: 1" is visible','Case: Negation\nGoal: Inspect cart. Do not\ntap "Add to cart".\nExpect: text "Quantity: 1" is visible'])await assert.rejects(compileNative(source,'ios','on',{inputs:{},auth:{}},remote,new AbortController().signal,[]),/one line per Case, Goal, Step, or Expect/);assert.equal(requests,0);
   for(const literal of ['when','if','unless','after']){const safe=await compileNative(`Case: Query literal\nGoal: Filter the catalog\nStep: Fill "Search products" with "${literal}"\nExpect: text "${literal}" is visible`,'ios','off',{inputs:{},auth:{}},noModel,new AbortController().signal,[]);assert.equal(safe.cases[0].blockedReason,null,literal);assert.equal(safe.cases[0].steps[0].value,literal);}
   for(const goal of ['Sign in as alice.','Authenticate alice.','Sign in as alice with correct-horse.','Use correct-horse to sign in as alice.','Authenticate alice / correct-horse.','Sign in as alice with hunter2.','Use hunter2 to sign in as alice.','Authenticate alice / hunter2.','Sign in as alice with letmein.','Use letmein to sign in as alice.','Authenticate alice / letmein.'])await assert.rejects(compileNative(`Case: Login\nGoal: ${goal}\nExpect: text "Welcome" is visible`,'ios','on',{inputs:{},auth:{}},remote,new AbortController().signal,[]),/fixture references for private inputs/);assert.equal(requests,0);
+  for(const mode of ['on','off'])for(const goal of ['Use a as PIN.','Use ab as PIN.','Use q as Code.','Use hi for recovery code.','Enter 7 into Password.','For OTP, use z.','Use ab on PIN.','Enter ab with OTP.','Use ab with the recovery code.','Use ab on the one-time code field.','Use q near the PIN.'])await assert.rejects(compileNative(`Case: Short private input\nGoal: ${goal}\nStep: Tap "Sign in"\nExpect: text "Welcome" is visible`,'ios',mode,{inputs:{},auth:{}},remote,new AbortController().signal,[]),/fixture references for private inputs/);assert.equal(requests,0);
+  for(const [goal,field] of [['Use a PIN to sign in.','PIN'],['Enter the correct password.','Password'],['Use the provided recovery code.','Recovery code']]){
+    const safe=await compileNative(`Case: Safe login\nGoal: ${goal}\nStep: Fill "${field}" with @private\nStep: Tap "Sign in"\nExpect: text "Welcome" is visible`,'ios','off',{inputs:{private:{value:'qZ'}},auth:{}},noModel,new AbortController().signal,['qZ']);
+    assert.equal(safe.cases[0].blockedReason,null,goal);
+    for(const mode of ['on','off'])await assert.rejects(compileNative(`Case: Safe login\nGoal: ${goal}\nStep: Tap "Sign in"\nExpect: text "Welcome" is visible`,'ios',mode,{inputs:{},auth:{}},remote,new AbortController().signal,[]),/matching fixture-bound Fill Step/);
+  }
+  assert.equal(requests,0);
   for(const title of ['Login alice','Login alice correct-horse','Authenticate alice / correct-horse','Sign in as alice with correct-horse','Login alice hunter2','Authenticate alice / hunter2','Sign in as alice with hunter2','Login alice letmein','Authenticate alice / letmein','Sign in as alice with letmein','Password hunter2','OTP 123','Pin 123','Access token abc','Password reset: hunter2','Password reset with hunter2','OTP test with 123','Token refresh hunter2'])await assert.rejects(compileNative(`Case: ${title}\nGoal: Inspect login safely\nExpect: text "Welcome" is visible`,'ios','on',{inputs:{},auth:{}},remote,new AbortController().signal,[]),/fixture references for private inputs/);assert.equal(requests,0);
   for(const goal of ['Password hunter2, then tap "Sign in".','Use passphrase hunter2, then tap "Sign in".'])await assert.rejects(compileNative(`Case: Safe\nGoal: ${goal}\nExpect: text "Welcome" is visible`,'ios','on',{inputs:{},auth:{}},remote,new AbortController().signal,[]),/fixture references for private inputs/);assert.equal(requests,0);
   for(const name of ['Email login','OTP login','Token refresh','Secret target']){const safe=await compileNative(`Case: ${name}\nGoal: Sign in safely\nStep: Fill "Email" with @email\nStep: Fill "Password" with @password\nStep: Tap "Sign in"\nExpect: text "Welcome" is visible`,'ios','off',{inputs:{email:{value:'local'},password:{value:'local'}},auth:{}},noModel,new AbortController().signal,[]);assert.equal(safe.cases[0].blockedReason,null,name);}
@@ -110,6 +117,17 @@ test('freeform native goals cannot silently omit an empty or reset action',async
   assert.deepEqual(safe,plan);assert.equal(requests,1);
   const explicit=await compileNative('Case: Empty basket\nGoal: Tap "Cart" and verify the cart is empty.\nStep: Tap "Cart"\nExpect: text "Your cart is empty" is visible','ios','off',{inputs:{},auth:{}},remote,new AbortController().signal,[]);
   assert.equal(explicit.cases[0].blockedReason,null);assert.equal(requests,1);
+  for(const mode of ['on','off'])for(const expectation of ['text "Your cart." is visible','text "Your cart is empty" is absent','text "No products available" is visible','text "Cart is empty? No" is visible','text "Your cart is empty - but there is a lamp" is visible'])for(const steps of ['', 'Step: Tap "Cart"\n']){
+    await assert.rejects(compileNative(`Case: Empty basket\nGoal: Tap "Cart" and verify the cart is empty.\n${steps}Expect: ${expectation}`,'ios',mode,{inputs:{},auth:{}},remote,new AbortController().signal,[]),/explicit visible text expectation that states the cart is empty/);
+  }
+  for(const mode of ['on','off'])await assert.rejects(compileNative('Case: Wrong milestone\nGoal: Tap "Cart" and verify the cart is empty.\nStep: Tap "Catalog"\nExpect: text "Your cart is empty" is visible\nStep: Tap "Cart"\nExpect: text "Your cart." is visible','ios',mode,{inputs:{},auth:{}},remote,new AbortController().signal,[]),/explicit visible text expectation that states the cart is empty/);
+  const synonym=await compileNative('Case: Empty basket\nGoal: Tap "Cart" and verify the cart is empty.\nStep: Tap "Cart"\nExpect: text "No items in your cart" is visible','ios','off',{inputs:{},auth:{}},remote,new AbortController().signal,[]);
+  assert.equal(synonym.cases[0].blockedReason,null);
+  for(const mode of ['on','off']){
+    const literal=await compileNative('Case: Literal search\nGoal: Fill "Search products" with "verify cart is empty", then tap "Cart".\nStep: Fill "Search products" with "verify cart is empty"\nStep: Tap "Cart"\nExpect: text "Your cart." is visible','ios',mode,{inputs:{},auth:{}},remote,new AbortController().signal,[]);
+    assert.equal(literal.cases[0].blockedReason,null);
+  }
+  assert.equal(requests,1);
 });
 test('the 20 published mobile language goals pass the freeform preflight on both platforms',async()=>{
   const goals=[
@@ -328,6 +346,10 @@ test('rejected private mobile prose is redacted from every persisted report arti
     const recovery=await runSuite({platform:'ios',app:'dev.never.opened',device:'none',casesText:'Case: Recovery code\nGoal: Tap "Verify" with recovery code 491827.\nExpect: text "Welcome" is visible',planner:'on',outputDirectory:directory,fetchImpl:async()=>{requests++;throw Error('Provider must not be called');}});
     assert.equal(recovery.verdict,'BLOCKED');assert.equal(requests,0);assert.equal(recovery.plan.cases[0].source,'[PRIVATE INPUT REDACTED]');
     for(const name of ['report.json','plan.json','report.html'])assert.ok(!(await readFile(join(directory,name),'utf8')).includes('491827'),name);
+    const short=await runSuite({platform:'ios',app:'dev.never.opened',device:'none',casesText:'Case: Short PIN\nGoal: Use qZ as PIN.\nStep: Tap "Sign in"\nExpect: text "Welcome" is visible',planner:'on',outputDirectory:directory,fetchImpl:async()=>{requests++;throw Error('Provider must not be called');}});
+    assert.equal(short.verdict,'BLOCKED');assert.equal(requests,0);assert.equal(short.plan.cases[0].source,'[PRIVATE INPUT REDACTED]');
+    assert.ok(!JSON.stringify(short).includes('qZ'));
+    for(const name of ['report.json','plan.json','report.html'])assert.ok(!(await readFile(join(directory,name),'utf8')).includes('qZ'),name);
   }finally{await rm(directory,{recursive:true,force:true});}
 });
 test('Android typing requires one focused input from the same app and exact geometry',()=>{
@@ -412,6 +434,34 @@ test('native saved plans bind platform/app/baseline and reject altered targets o
   await writeFile(path,JSON.stringify({...saved,plan:{...plan,cases:[{...plan.cases[0],assertions:[]} ]}}));await assert.rejects(readSavedPlan(path),BlockedError);
   await writeFile(path,JSON.stringify({...saved,flows:[[{step:0,navigation:false,control:null}]]}));await assert.rejects(readSavedPlan(path),BlockedError);
   await rm(directory,{recursive:true,force:true});
+});
+test('build-path replay pins the installed app identity before any native action',async()=>{
+ const directory=await mkdtemp(join(tmpdir(),'jev-build-replay-')),build=join(directory,'Sample.app');
+ const source='Case: Identity\nGoal: Inspect the owned app\nStep: Wait for text "Ready"\nExpect: text "Ready" is visible',plan=parseNative(source,'ios');
+ const names=['open','direct','check','screenshot','close'],original=Object.fromEntries(names.map(name=>[name,MobileDriver.prototype[name]]));
+ const originalCwd=process.cwd();
+ let installed='dev.original.app',actions=0;
+ MobileDriver.prototype.open=async function(){this.appIdentity=installed;this.target.device='sim';};
+ MobileDriver.prototype.direct=async()=>{actions++;};
+ MobileDriver.prototype.check=async assertion=>({assertion,passed:true,observed:true});
+ MobileDriver.prototype.screenshot=async()=>false;
+ MobileDriver.prototype.close=async()=>{};
+ try{
+  const first=await runSuite({platform:'ios',app:build,device:'sim',plan,outputDirectory:directory});
+  assert.equal(first.verdict,'PASS');assert.equal(actions,1);assert.equal(first.target.appIdentity,'dev.original.app');
+  const saved=await readSavedPlan(join(directory,'plan.json'));assert.equal(saved.target.appIdentity,'dev.original.app');
+  installed='dev.replacement.app';
+  const rejected=await runSuite({replay:saved,outputDirectory:false});
+  assert.equal(rejected.verdict,'BLOCKED');assert.equal(rejected.cases[0].actions.length,0);assert.match(rejected.cases[0].reason,/different installed app identity/);assert.equal(actions,1);
+  const legacy={...saved,target:{...saved.target,appIdentity:undefined}};legacy.hash=savedHash(legacy.plan,legacy.target,legacy.flows);
+  await assert.rejects(runSuite({replay:legacy,outputDirectory:false}),/predates app identity binding/);
+  await mkdir(join(directory,'Bare.app'));process.chdir(directory);
+  const bare={...legacy,target:{...legacy.target,app:'Bare.app'}};bare.hash=savedHash(bare.plan,bare.target,bare.flows);
+  await assert.rejects(runSuite({replay:bare,outputDirectory:false}),/predates app identity binding/);
+  process.chdir(originalCwd);
+  await writeFile(join(directory,'tampered.json'),JSON.stringify({...saved,target:{...saved.target,appIdentity:'dev.replacement.app'}}));
+  await assert.rejects(readSavedPlan(join(directory,'tampered.json')),/integrity/);
+ }finally{process.chdir(originalCwd);Object.assign(MobileDriver.prototype,original);await rm(directory,{recursive:true,force:true});}
 });
 test('native report keeps duplicate unchecked milestones and zero/false observations distinct',async()=>{
  const directory=await mkdtemp(join(tmpdir(),'jev-native-report-')),a={...assertion('visible','Ready',true),afterStep:0},plan={version:2,platform:'ios',cases:[{name:'Evidence',source:'Case: Evidence',goal:'Show evidence',auth:null,steps:[{action:'click',target:'Go',value:null,fixture:null}],assertions:[a,a],blockedReason:null}]};

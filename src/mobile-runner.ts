@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, chmod } from 'node:fs/promises';
+import { mkdir, chmod, rename, rm, stat } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { z } from 'zod';
@@ -23,6 +23,9 @@ export async function runMobileSuite(options: RunOptions): Promise<SuiteResult> 
   if (!target.app.trim()) throw new BlockedError('Provide --app with an installed bundle/package ID or simulator .app / emulator .apk build.');
   if (platform === 'ios' && process.platform !== 'darwin') throw new BlockedError('iOS Simulator requires macOS and Xcode.');
   if (saved && (saved.version !== 2 || !saved.target || saved.plan.version !== 2 || saved.hash !== savedHash(saved.plan, saved.target, saved.flows) || saved.flows.length !== saved.plan.cases.length || saved.flows.some((flow, index) => flow !== null && (!z.array(FlowSchema).max(100).safeParse(flow).success || flow.some(action => action.step >= saved.plan.cases[index].steps.length))) || saved.target.platform !== platform || saved.target.app !== target.app)) throw new BlockedError('Saved mobile plan does not match this app/platform, or its integrity check failed.');
+  // The driver also treats a bare filename as a build when it exists in cwd.
+  const buildPath = target.app.includes('/') || target.app.includes('\\') || target.app.startsWith('.') || Boolean(await stat(resolve(target.app)).catch(() => null));
+  if (saved && buildPath && !saved.target?.appIdentity) throw new BlockedError('This build-path replay predates app identity binding. Run the reviewed plan once to save a new replay with its resolved app identity.');
   const timeout = options.timeoutMs ?? 60000, maxActions = options.maxActions ?? 30;
   if (!Number.isFinite(provider.maxCost) || provider.maxCost <= 0 || !Number.isInteger(provider.maxRequests) || provider.maxRequests < 1 || !Number.isInteger(maxActions) || maxActions < 1 || maxActions > 100 || !Number.isFinite(timeout) || timeout < 100 || timeout > 300000) throw new BlockedError('Budgets/limits must be positive; timeout 100–300000 ms, actions 1–100.');
   const fixtures = options.fixtures ?? { inputs: {}, auth: {} }, secrets = [...secretValues(fixtures), ...(options.apiKey ? [options.apiKey] : [])];
@@ -60,6 +63,9 @@ export async function runMobileSuite(options: RunOptions): Promise<SuiteResult> 
       const values = test.steps.map(step => { if (!step.fixture) return step.value; const value = Object.hasOwn(fixtures.inputs, step.fixture) ? fixtures.inputs[step.fixture]?.value : undefined; if (value === undefined) throw new BlockedError(`Missing input fixture: ${step.fixture}.`); return value; });
       await options.beforeCase?.(i); caseSignal.throwIfAborted();
       await timed('setup', () => driver.open(caseSignal));
+      const expectedIdentity = options.savedTarget?.appIdentity ?? saved?.target?.appIdentity ?? target.appIdentity;
+      if (expectedIdentity && driver.resolvedApp !== expectedIdentity) throw new BlockedError('The saved mobile plan belongs to a different installed app identity. No app action was dispatched.');
+      target.appIdentity = driver.resolvedApp;
       target.device = driver.target.device; versions = await timed('setup', () => nativeVersions({ ...target, app: driver.resolvedApp }, caseSignal));
       progress({ type: 'context.opened', message: `Opened ${platform} app on ${target.device}; data is preserved.`, caseName: test.name });
       const lastPrivate = test.steps.reduce((last, step, index) => step.fixture || sensitiveInputTarget(step.target ?? '') ? index : last, -1);
@@ -130,10 +136,16 @@ export async function runMobileSuite(options: RunOptions): Promise<SuiteResult> 
         }
         if (result.verdict === 'FAIL') break;
         if (directory && options.onProgress) {
+          const staging = join(directory, `.preview-${randomUUID()}.png`);
           try {
-            const captured = await timed('artifact', () => driver.screenshot(join(directory, 'preview.png'), caseSignal));
-            if (captured) progress({ type: 'preview', message: 'Updated eligible native screen.', caseName: test.name, screenshot: 'preview.png' });
+            const captured = await timed('artifact', () => driver.screenshot(staging, caseSignal));
+            if (captured) {
+              caseSignal.throwIfAborted();
+              await timed('artifact', () => rename(staging, join(directory, 'preview.png')));
+              progress({ type: 'preview', message: 'Updated eligible native screen.', caseName: test.name, screenshot: 'preview.png' });
+            }
           } catch { caseSignal.throwIfAborted(); }
+          finally { await rm(staging, { force: true }); }
         }
       }
       if (result.verdict !== 'FAIL') {

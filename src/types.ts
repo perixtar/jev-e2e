@@ -66,7 +66,7 @@ export type CaseResult = {
   evidenceNotes?: string[];
 };
 export type ModelStats = { requests: number; plannerRequests: number; jevRequests: number; cost: number; models: string[] };
-export type NativeTarget = { platform: 'ios' | 'android'; app: string; device: string; baseline: 'preserve' };
+export type NativeTarget = { platform: 'ios' | 'android'; app: string; device: string; baseline: 'preserve'; appIdentity?: string };
 export type SuiteResult = {
   version: 1 | 2; id: string; startedAt: string; url: string; verdict: Verdict;
   canceled: boolean; cases: CaseResult[]; durationMs: number; model: ModelStats;

@@ -153,7 +153,14 @@ function privateInputLiteral(text: string): boolean {
   // Credential-bearing titles/goals have a deliberately small public-vocabulary
   // grammar. Any extra word could itself be a short username or secret; it
   // must stay local until the author replaces it with an @fixture binding.
-  const publicWords = new Set('a an the and or to for in on of with without as is was are be been should can cannot not that this those then after before use enter type fill check verify test inspect confirm reject wrong invalid valid missing accepted rejected expired works fails login log sign safely safe flow success failure page screen form field target entry reset refresh validation expectation fixture fixtures input inputs credentials email e-mail user name username password passcode pass phrase passphrase pin otp totp one time verification security question recovery backup seed authenticator mfa 2fa two factor sms authentication auth code key phrase answer access token secret api credit card number cvv cvc social ssn account'.split(' '));
+  const publicWords = new Set('a an the and or to for in on of with without as is was are be been should can cannot not that this those then after before use enter type fill check verify test inspect confirm reject wrong correct invalid valid provided supplied missing accepted rejected expired works fails login log sign safely safe flow success failure page screen form field target entry reset refresh validation expectation fixture fixtures input inputs credentials email e-mail user name username password passcode pass phrase passphrase pin otp totp one time verification security question recovery backup seed authenticator mfa 2fa two factor sms authentication auth code key phrase answer access token secret api credit card number cvv cvc social ssn account'.split(' '));
+  // A private-field input instruction with an unbound value stays local even
+  // when the author uses an unfamiliar connector. Plain descriptions such as
+  // "use a PIN" or "enter the correct password" may use fixture-bound Steps.
+  const unboundPrivateClause = new RegExp(String.raw`\b(?:use|enter|type|input|fill|replace|set|put|paste|provide)\b([^\n.!?;]*?)\b${privateInputFieldSource}\b`, 'gi');
+  for (const match of authored.replace(nativeActionExpression(), '').matchAll(unboundPrivateClause)) {
+    if (!/^(?:(?:a|an|the|my|your|correct|valid|invalid|provided|supplied|test|temporary|existing|new)\s+)*$/i.test(match[1].trimStart())) return true;
+  }
   const privateTerm = new RegExp(String.raw`\b(?:${privateInputFieldSource}|login)\b`, 'gi');
   for (const line of authored.split('\n')) {
     if (!/^(?:Case|Goal):/i.test(line)) continue;
@@ -165,7 +172,7 @@ function privateInputLiteral(text: string): boolean {
       // A title can describe an unrelated next task without making its object
       // a credential value: "Login and add lamp". It does not define actions.
       if (/^\s+and\s+(?:add|search|open|view|remove)\b/i.test(tail)) tail = '';
-      const trailing = tail.match(/[A-Za-z0-9][A-Za-z0-9._+-]*/g) ?? [];
+      const trailing = tail.replace(/[.!?]+$/, '').match(/[A-Za-z0-9][A-Za-z0-9._+-]*/g) ?? [];
       if (trailing.some(word => !publicWords.has(word.toLowerCase()))) return true;
     }
   }
@@ -186,9 +193,9 @@ function privateInputLiteral(text: string): boolean {
     new RegExp('^[ \\t]*Case:[ \\t]*Login[ \\t]+(?!(?:flow|success|page|with|failure|failed|rejected|invalid|valid|test|screen|form|state|and)\\b)' + authToken + '\\b', 'im'),
   ];
   if (unboundIdentityPatterns.some(pattern => pattern.test(authored))) return true;
-  if (new RegExp(privateFieldPattern + String.raw`"?(?:\s+field)?\s*(?:with|using|=|is|:|to|should\s+be)\s*(?!@)(?:"[^"\n]+"|[^\s,.;]+)`, 'i').test(authored)) return true;
-  if (new RegExp(String.raw`\b(?:for|in)\s+(?:the\s+)?"?` + privateFieldPattern + String.raw`"?(?:\s+field)?\s*[,;:]\s*(?:enter|type|input|use|fill|replace|set|put|paste|provide)\s+(?:code\s+)?(?!@)(?:"[^"\n]+"|'[^'\n]+'|\d[\d -]{2,20}\d|[A-Za-z0-9][A-Za-z0-9._-]{2,})`, 'i').test(authored)) return true;
-  if (new RegExp(String.raw`\b(?:enter|type|input|use|fill|replace|set|put|paste|provide)\s+(?:code\s+)?(?!@)(?:"[^"\n]+"|'[^'\n]+'|\d[\d -]{2,20}\d|[A-Za-z0-9][A-Za-z0-9._-]{2,})\s+(?:in|into|for|as)\s+(?:the\s+)?"?(?:` + privateInputFieldSource + String.raw`|login(?:\s+(?:id|name))?)\b`, 'i').test(authored)) return true;
+  if (new RegExp(privateFieldPattern + String.raw`(?!\s+to\s+(?:sign\s+in|log\s+in)\b)"?(?:\s+field)?\s*(?:with|using|=|is|:|to|should\s+be)\s*(?!@)(?:"[^"\n]+"|[^\s,.;]+)`, 'i').test(authored)) return true;
+  if (new RegExp(String.raw`\b(?:for|in)\s+(?:the\s+)?"?` + privateFieldPattern + String.raw`"?(?:\s+field)?\s*[,;:]\s*(?:enter|type|input|use|fill|replace|set|put|paste|provide)\s+(?:code\s+)?(?!@)(?:"[^"\n]+"|'[^'\n]+'|[A-Za-z0-9][A-Za-z0-9._-]*)`, 'i').test(authored)) return true;
+  if (new RegExp(String.raw`\b(?:enter|type|input|use|fill|replace|set|put|paste|provide)\s+(?:code\s+)?(?!@)(?:"[^"\n]+"|'[^'\n]+'|[A-Za-z0-9][A-Za-z0-9._-]*)\s+(?:in|into|for|as)\s+(?:the\s+)?"?(?:` + privateInputFieldSource + String.raw`|login(?:\s+(?:id|name))?)\b`, 'i').test(authored)) return true;
   for (const line of authored.split('\n')) {
     if (/\b(?:sign[- ]?in|log[- ]?in|login|authenticate|authentication)\b/i.test(line)) {
       for (const token of line.match(/[A-Za-z0-9][A-Za-z0-9._+@/-]*/g) ?? []) {
@@ -213,11 +220,29 @@ export async function compileNative(text: string, platform: 'ios' | 'android', m
   const valueFirstLiteral = new RegExp(String.raw`\b(?:enter|type|fill|replace)\s+"(?:\\.|[^"\\])+"\s+(?:in|into|for)\s+"?` + privateInputFieldSource + String.raw`\b`, 'i').test(text);
   if (containsSecret(text, secrets) || privateInputLiteral(text) || authoredLiteral || targetFirstLiteral || valueFirstLiteral) throw new BlockedError('Use @fixture references for private inputs.');
   if (/^Auth:/im.test(text) || /captcha|biometric|face id|touch id|canvas|pixel|looks (?:good|right)/i.test(text) || unsupportedNativeMutation(text)) throw new BlockedError('This native case needs an unsupported capability. Use observed UI actions and exact expectations.');
+  for (const block of splitCases(text)) {
+    const lines = block.source.split('\n');
+    const goal = lines.find(line => /^Goal:/i.test(line)) ?? '';
+    if (!/\bverify\s+(?:the\s+)?(?:cart|basket|bag)\s+is\s+empty\b/i.test(goal.replace(/"(?:\\.|[^"\\])*"/g, '""'))) continue;
+    const finalStep = lines.reduce((position, line, index) => /^Step:/i.test(line) ? index : position, -1);
+    const provesEmpty = lines.slice(finalStep + 1).filter(line => /^Expect:/i.test(line)).some(line => {
+      try {
+        const check = nativeExpectation(line.replace(/^Expect:\s*/i, ''));
+        return check.kind === 'visible' && check.target?.by === 'text' && /^(?:(?:(?:the|your)\s+)?(?:cart|basket|bag)\s+is\s+empty|no\s+(?:items?|products?)\s+in\s+(?:(?:the|your)\s+)?(?:cart|basket|bag))[.!]?$/i.test(check.target.text.trim());
+      } catch { return false; }
+    });
+    if (!provesEmpty) throw new BlockedError('To verify an empty cart, add an explicit visible text expectation that states the cart is empty.');
+  }
   if (mode === 'on' && !/^Step:/im.test(text) && unaccountedNativeAction(text)) throw new BlockedError('A freeform native action could not be bound safely. Use explicit Step lines or supported Tap/Fill/Check/Scroll/Back/Relaunch wording.');
   const baseline = parseNative(text, platform);
   for (const test of baseline.cases) {
     if (test.blockedReason || !/^Step:/im.test(test.source)) continue;
     const goal = test.source.split('\n').find(line => /^Goal:/i.test(line)) ?? '';
+    const describedPrivateInput = new RegExp(String.raw`\b(?:use|enter|type|input|fill|replace|set|put|paste|provide)\s+(?:(?:a|an|the|my|your|correct|valid|invalid|provided|supplied|test|temporary|existing|new)\s+)*(${privateInputFieldSource})\b`, 'gi');
+    for (const match of goal.replace(/"(?:\\.|[^"\\])*"/g, '""').matchAll(describedPrivateInput)) {
+      const field = match[1].replace(/\s+/g, ' ').toLowerCase();
+      if (!test.steps.some(step => step.action === 'fill' && step.fixture && step.target?.replace(/\s+/g, ' ').toLowerCase() === field)) throw new BlockedError('A private input named in Goal needs a matching fixture-bound Fill Step.');
+    }
     const namedActions = authoredNativeSteps(goal);
     if (!namedActions.length) continue; // Otherwise the Goal is a summary; Step lines define the actions.
     if (unaccountedNativeAction(goal)) throw new BlockedError('A Goal action could not be matched safely. Put every action in explicit Step lines.');

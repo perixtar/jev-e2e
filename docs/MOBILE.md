@@ -120,7 +120,7 @@ jev-e2e run --platform android --device emulator-5554 \
 jev-e2e run --replay ./local-report/plan.json --device emulator-5554
 ```
 
-Reports include expected/observed milestones, unchecked expectations, confirmed or uncertain action dispatches, versions, model usage/cost, and planning/setup/observation/model/action/check/artifact/cleanup timings. A target rejected by the final freshness check is not reported as dispatched. Version-2 native replay plans bind app, platform, and a preserve-data baseline. They store semantic controls and accessibility identifiers, rather than coordinates or ephemeral refs. A stale missing target may be repaired by Jev; ambiguous or unsafe targets block. Existing version-1 web plans retain browser behavior.
+Reports include expected/observed milestones, unchecked expectations, confirmed or uncertain action dispatches, versions, model usage/cost, and planning/setup/observation/model/action/check/artifact/cleanup timings. A target rejected by the final freshness check is not reported as dispatched. Version-2 native replay plans bind app, platform, and a preserve-data baseline. They store semantic controls and accessibility identifiers, rather than coordinates or ephemeral refs. A successful run from a `.app` or `.apk` path also pins the installed bundle/package ID; replay blocks before an action if the build at that path now installs a different app. Older build-path plans without a pinned identity must be run with `--plan` once to create a new replay artifact. A stale missing control may be repaired by Jev; ambiguous or unsafe controls block. Existing version-1 web plans retain browser behavior.
 
 | Outcome | Exit | Meaning |
 | --- | --- | --- |
@@ -157,13 +157,16 @@ xcodebuild -workspace JevShop.xcworkspace -scheme JevShop \
 
 Start `node examples/mobile-app/control.mjs` from the repository root for manual tests. Synthetic credentials: `demo@example.test` / `correct-horse`; wrong password: `wrong-horse`. Export these into the variables in `examples/mobile.fixtures.example.json`. Install the builds on dedicated devices and use the cases in `examples/mobile.cases`.
 
-The paid acceptance matrix owns its baseline service and retains every first attempt:
+Run one platform at a time, as in the published acceptance cohort. The evaluator owns its baseline service and retains every first attempt:
 
 ```sh
 npm run build
-node scripts/evaluate-mobile.mjs --live --platform both \
-  --ios-device IOS_ID --android-device emulator-5554 \
-  --rounds 10 --max-cost 2 --out .jev-e2e/mobile-evaluation
+node scripts/evaluate-mobile.mjs --live --platform ios \
+  --ios-device IOS_ID --rounds 10 --max-cost 2 \
+  --out .jev-e2e/mobile-evaluation/ios
+node scripts/evaluate-mobile.mjs --live --platform android \
+  --android-device emulator-5554 --rounds 10 --max-cost 2 \
+  --out .jev-e2e/mobile-evaluation/android
 ```
 
 It verifies that each trial consumed its intended baseline/fault configuration. Healthy execution, bug detection, and replay are reported separately; BLOCKED is never counted as detected failure.

@@ -14,7 +14,7 @@ import { writeReport } from './report.js';
 import { BlockedError, validateSuite, type Fixtures, type Suite, type SuiteResult, type CaseResult, type Snapshot, type Step, type Selection, type Progress, type FlowAction, type NativeTarget } from './types.js';
 
 export const FlowSchema = z.object({ step: z.number().int().nonnegative(), navigation: z.boolean(), control: z.object({ tag: z.string().max(30), role: z.string().max(30), label: z.string().max(240), context: z.string().max(600), type: z.string().max(40), identifier: z.string().max(300).optional() }).strict().nullable() }).strict();
-const NativeTargetSchema = z.object({ platform: z.enum(['ios', 'android']), app: z.string().min(1).max(1000), device: z.string().max(300), baseline: z.literal('preserve') }).strict();
+const NativeTargetSchema = z.object({ platform: z.enum(['ios', 'android']), app: z.string().min(1).max(1000), device: z.string().max(300), baseline: z.literal('preserve'), appIdentity: z.string().min(1).max(300).optional() }).strict();
 export type SavedPlan = { version: 1 | 2; plan: Suite; hash: string; flows: (FlowAction[] | null)[]; target?: NativeTarget };
 export function savedHash(plan: Suite, target?: NativeTarget, flows?: (FlowAction[] | null)[]): string { return target ? createHash('sha256').update(JSON.stringify({ plan, target, flows: flows ?? plan.cases.map(() => null) })).digest('hex') : planHash(plan); }
 export async function readSavedPlan(path: string): Promise<SavedPlan> {
