@@ -1,5 +1,6 @@
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
 import { randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { readFile, mkdir, chmod } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -10,26 +11,30 @@ import { decide, type ProviderOptions } from './providers.js';
 import { observe, execute, disposeObservation, replayControl, savedControl, maskedScreenshot } from './browser.js';
 import { checkAssertion, assertionLocator } from './assertions.js';
 import { writeReport } from './report.js';
-import { BlockedError, validateSuite, type Fixtures, type Suite, type SuiteResult, type CaseResult, type Snapshot, type Step, type Selection, type Progress, type FlowAction } from './types.js';
+import { BlockedError, validateSuite, type Fixtures, type Suite, type SuiteResult, type CaseResult, type Snapshot, type Step, type Selection, type Progress, type FlowAction, type NativeTarget } from './types.js';
 
-const FlowSchema = z.object({ step: z.number().int().nonnegative(), navigation: z.boolean(), control: z.object({ tag: z.string().max(30), role: z.string().max(30), label: z.string().max(240), context: z.string().max(600), type: z.string().max(40) }).strict().nullable() }).strict();
-export type SavedPlan = { version: 1; plan: Suite; hash: string; flows: (FlowAction[] | null)[] };
+export const FlowSchema = z.object({ step: z.number().int().nonnegative(), navigation: z.boolean(), control: z.object({ tag: z.string().max(30), role: z.string().max(30), label: z.string().max(240), context: z.string().max(600), type: z.string().max(40), identifier: z.string().max(300).optional() }).strict().nullable() }).strict();
+const NativeTargetSchema = z.object({ platform: z.enum(['ios', 'android']), app: z.string().min(1).max(1000), device: z.string().max(300), baseline: z.literal('preserve'), appIdentity: z.string().min(1).max(300).optional() }).strict();
+export type SavedPlan = { version: 1 | 2; plan: Suite; hash: string; flows: (FlowAction[] | null)[]; target?: NativeTarget };
+export function savedHash(plan: Suite, target?: NativeTarget, flows?: (FlowAction[] | null)[]): string { return target ? createHash('sha256').update(JSON.stringify({ plan, target, flows: flows ?? plan.cases.map(() => null) })).digest('hex') : planHash(plan); }
 export async function readSavedPlan(path: string): Promise<SavedPlan> {
   const raw = JSON.parse(await readFile(resolve(path), 'utf8'));
   const plan = validateSuite(raw.plan ?? raw);
-  if (!raw.plan) return { version: 1, plan, hash: planHash(plan), flows: plan.cases.map(() => null) };
-  if (raw.version !== 1 || raw.hash !== planHash(plan) || !Array.isArray(raw.flows) || raw.flows.length !== plan.cases.length) throw new BlockedError('Saved plan integrity/schema check failed. Recompile the source cases.');
+  if (!raw.plan) { if (plan.version !== 1) throw new BlockedError('Native saved plans must include their app/platform baseline.'); return { version: 1, plan, hash: planHash(plan), flows: plan.cases.map(() => null) }; }
+  const target = raw.version === 2 ? NativeTargetSchema.parse(raw.target) : undefined;
+  if (raw.version !== plan.version || target && (plan.version !== 2 || target.platform !== plan.platform) || raw.hash !== savedHash(plan, target, raw.flows) || !Array.isArray(raw.flows) || raw.flows.length !== plan.cases.length) throw new BlockedError('Saved plan integrity/schema check failed. Recompile the source cases.');
   const flows = raw.flows.map((flow: unknown, index: number) => {
     if (flow === null) return null;
     const result = z.array(FlowSchema).max(100).safeParse(flow);
     if (!result.success || result.data.some(action => action.step >= plan.cases[index].steps.length)) throw new BlockedError('Saved flow is invalid.');
     return result.data;
   });
-  return { version: 1, plan, hash: raw.hash, flows };
+  return { version: raw.version, plan, hash: raw.hash, flows, ...(target ? { target } : {}) };
 }
 
 export type RunOptions = {
-  url: string; casesText?: string; plan?: Suite; replay?: SavedPlan;
+  url?: string; platform?: 'web' | 'ios' | 'android'; app?: string; device?: string; record?: boolean;
+  casesText?: string; plan?: Suite; replay?: SavedPlan; savedTarget?: NativeTarget;
   planner?: 'on' | 'off'; fixtures?: Fixtures; apiKey?: string; plannerModel?: string; jevModel?: string;
   headed?: boolean; outputDirectory?: string | false; signal?: AbortSignal;
   timeoutMs?: number; assertionTimeoutMs?: number; maxActions?: number; maxRequests?: number; maxCost?: number;
@@ -49,8 +54,12 @@ export function providerOptions(options: RunOptions): ProviderOptions {
 }
 
 export async function runSuite(options: RunOptions): Promise<SuiteResult> {
+  if (options.platform === 'ios' || options.platform === 'android' || options.replay?.version === 2 || options.plan?.version === 2) {
+    const { runMobileSuite } = await import('./mobile-runner.js'); return runMobileSuite(options);
+  }
+  if (options.app || options.device || options.record) throw new BlockedError('--app, --device, and --record require --platform ios or android.');
   const start = Date.now(); const id = randomUUID(); const startedAt = new Date(start).toISOString();
-  const url = validUrl(options.url); const origins = new Set([new URL(url).origin, ...(options.allowedOrigins ?? []).map(value => new URL(validUrl(value)).origin)]);
+  const url = validUrl(options.url ?? ''); const origins = new Set([new URL(url).origin, ...(options.allowedOrigins ?? []).map(value => new URL(validUrl(value)).origin)]);
   const fixtures = options.fixtures ?? { inputs: {}, auth: {} }; const secrets = [...secretValues(fixtures), ...(options.apiKey ? [options.apiKey] : [])];
   const fixtureSecrets = secretValues(fixtures, {});
   const suiteController = new AbortController(); const abort = () => suiteController.abort();
@@ -71,11 +80,13 @@ export async function runSuite(options: RunOptions): Promise<SuiteResult> {
     signal.addEventListener('abort', stopPlanning, { once: true }); if (signal.aborted) stopPlanning();
     try {
       plan = options.replay ? validateSuite(options.replay.plan) : options.plan ? validateSuite(options.plan) : await compileCases(options.casesText ?? '', options.planner ?? (process.env.JEV_E2E_PLANNER === 'off' ? 'off' : 'on'), fixtures, provider, planningController.signal, secrets);
+      if (plan.version !== 1) throw new BlockedError('Web runs require a version-1 browser plan.');
       if (options.replay && (options.replay.version !== 1 || options.replay.hash !== planHash(plan) || options.replay.flows.length !== plan.cases.length || options.replay.flows.some(flow => flow !== null && !z.array(FlowSchema).max(100).safeParse(flow).success))) throw new BlockedError('Saved plan integrity/schema check failed.');
       if (containsSecret(plan, secrets)) throw new BlockedError('The plan contains a secret literal; use fixture references.');
     } catch (error) {
       const reason = signal.aborted ? 'Run canceled.' : planningController.signal.aborted ? 'Planning deadline reached.' : error instanceof BlockedError ? error.message : 'Could not compile or validate the cases.';
       let blocks: ReturnType<typeof splitCases>; try { blocks = splitCases(options.casesText ?? ''); } catch { blocks = [{ name: 'Invalid suite', source: '' }]; }
+      if (reason === 'Credential literals must be replaced with @fixture references.') blocks = blocks.map((_, index) => ({ name: `Blocked private case ${index + 1}`, source: '[PRIVATE INPUT REDACTED]' }));
       plan = { version: 1, cases: blocks.map(block => ({ ...block, goal: block.name, auth: null, steps: [], assertions: [], blockedReason: reason })) };
     } finally { clearTimeout(planningTimer); signal.removeEventListener('abort', stopPlanning); }
     if (directory) await mkdir(directory, { recursive: true, mode: 0o700 });
@@ -93,11 +104,11 @@ export async function runSuite(options: RunOptions): Promise<SuiteResult> {
         if (test.blockedReason) throw new BlockedError(test.blockedReason);
         const values = test.steps.map(step => {
           if (!step.fixture) return step.value;
-          const value = fixtures.inputs[step.fixture]?.value;
+          const value = Object.hasOwn(fixtures.inputs, step.fixture) ? fixtures.inputs[step.fixture]?.value : undefined;
           if (value === undefined) throw new BlockedError(`Missing input fixture: ${step.fixture}.`);
           return value;
         });
-        const auth = test.auth ? fixtures.auth[test.auth] : undefined;
+        const auth = test.auth && Object.hasOwn(fixtures.auth, test.auth) ? fixtures.auth[test.auth] : undefined;
         if (test.auth && !auth) throw new BlockedError(`Missing auth fixture: ${test.auth}.`);
         if (auth) JSON.parse(await readFile(auth.storageState, 'utf8'));
         await options.beforeCase?.(index); caseSignal.throwIfAborted();

@@ -1,0 +1,474 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFile,writeFile,mkdir,mkdtemp,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {parseNative,compileNative,authoredNativeSteps,nativeExpectation} from '../dist/mobile-plan.js';
+import {provider} from './helpers.mjs';
+import {MobileDriver,nativeCheck,normalizeNative,nativeVersions} from '../dist/mobile.js';
+import {selectDevice,nativeToolEnvironment} from '../dist/device.js';
+import {runSuite,readSavedPlan,savedHash} from '../dist/runner.js';
+import {writeReport} from '../dist/report.js';
+import {validateSuite,BlockedError} from '../dist/types.js';
+import {androidCheckedEvidence,androidFocusedEvidence} from '../dist/android-state.js';
+import {DeviceConnection} from '../dist/device.js';
+import {EventEmitter} from 'node:events';
+
+const app='dev.example.app';
+const frame={x:0,y:0,width:400,height:800};
+const node=(index,type,label,extra={})=>({index,type,label,rect:frame,enabled:true,ref:`e${index+1}`,...extra});
+const snapshot=nodes=>({nodes,appBundleId:app,identifiers:{appBundleId:app,deviceId:'sim'},truncated:false,visibility:{partial:false,visibleNodeCount:nodes.length,totalNodeCount:nodes.length,reasons:[]},snapshotQuality:{state:'healthy'},refsGeneration:7});
+const assertion=(kind,text,expected,by='text')=>({kind,target:{by,text,role:null,within:null},expected});
+
+test('native cases preserve every action, fixture and intermediate milestone; web v1 stays distinct',async()=>{
+  const source=await readFile(new URL('../examples/mobile.cases',import.meta.url),'utf8');
+  const plan=parseNative(source,'ios');assert.equal(plan.version,2);assert.equal(plan.cases.length,5);assert.ok(plan.cases.every(c=>!c.blockedReason));
+  const persistence=plan.cases[4];assert.deepEqual(persistence.steps.map(s=>s.action),['fill','fill','click','click','click','relaunch','click']);assert.deepEqual(persistence.assertions.map(a=>a.afterStep),[4,6,6]);
+  assert.equal(persistence.steps[0].fixture,'email');assert.equal(persistence.steps[1].fixture,'password');
+  const noModel={stats:{plannerRequests:0},fetchImpl:()=>{throw Error('No model call allowed');}};
+  assert.deepEqual(await compileNative(source,'ios','off',{inputs:{},auth:{}},noModel,new AbortController().signal,[]),plan);
+  assert.throws(()=>validateSuite({...plan,version:1,platform:undefined}),BlockedError);
+  for(const step of ['Reload','Select "Theme" with "Dark"','Swipe forever','Fill "Password" with "literal"']){
+    const bad=parseNative(`Case: Unsupported\nGoal: Check\nStep: ${step}\nExpect: text "Done" is visible`,'ios');assert.ok(bad.cases[0].blockedReason);assert.equal(bad.cases[0].steps.length,0);
+  }
+  for(const action of ['Tap "Purchase"','Tap "Send message"','Tap "Buy now"','Tap "Place order"','Tap "Transfer funds"','Tap "Send"','Tap "Confirm order"','Tap "Submit order"','Tap "Message seller"','Tap "Publish comment"','Tap "Finalize booking"'])await assert.rejects(compileNative(`Case: Unsupported\nGoal: Do it\nStep: ${action}\nExpect: text "Done" is visible`,'ios','off',{inputs:{},auth:{}},noModel,new AbortController().signal,[]),/unsupported capability/);
+  assert.equal(parseNative('Case: Cart\nGoal: Add a product\nStep: Tap "Add to cart"\nExpect: text "Quantity: 1" is visible','ios').cases[0].blockedReason,null);
+  for(const source of ['Goal: Fill "OTP" with "123456", then tap "Verify".','Goal: Enter "123456" into "Verification code", then tap "Verify".','Goal: Fill "Credit card" using "4111111111111111", then tap "Continue".'])await assert.rejects(compileNative(`Case: Private literal\n${source}\nExpect: text "Done" is visible`,'ios','on',{inputs:{},auth:{}},noModel,new AbortController().signal,[]),/fixture references for private inputs/);
+  let requests=0;const remote=provider({fetchImpl:async()=>{requests++;throw Error('Private source reached provider');}});for(const goal of ['Sign in with "alice@example.com" and "correct-horse", then tap "Sign in".','The OTP is 123456, then tap "Verify".','Log in with alice and correct-horse.','Enter 123456 into verification code, then tap "Verify".','Type 123456 into "OTP", then tap "Verify".','Use correct-horse as the password, then tap "Sign in".','Put 123456 into OTP, then tap "Verify".','Paste 123456 into the verification code field, then tap "Verify".','Enter code 123456 in OTP, then tap "Verify".','The OTP should be 123456, then tap "Verify".','For OTP, enter 123456, then tap "Verify".','Provide correct-horse for password, then tap "Sign in".','Fill password field with correct-horse, then tap "Sign in".'])await assert.rejects(compileNative(`Case: Private prose\nGoal: ${goal}\nExpect: text "Welcome" is visible`,'ios','on',{inputs:{},auth:{}},remote,new AbortController().signal,[]),/fixture references for private inputs/);
+  for(const source of ['Case: Account alice@example.com\nGoal: Inspect account\nExpect: text "Welcome" is visible','Case: OTP expectation\nGoal: Inspect status\nExpect: value of id "otp" equals "123456"','Case: Password expectation\nGoal: Inspect status\nExpect: text "correct-horse" is visible','Case: Enter OTP 123456\nGoal: Inspect status\nExpect: text "Welcome" is visible','Case: Verification code 123456\nGoal: Inspect status\nExpect: text "Welcome" is visible','Case: Password correct-horse\nGoal: Inspect status\nExpect: text "Welcome" is visible','Case: OTP test 123456\nGoal: Inspect status\nExpect: text "Welcome" is visible','Case: Password reset with correct-horse\nGoal: Inspect status\nExpect: text "Welcome" is visible','Case: Enter 123456 OTP\nGoal: Inspect status\nExpect: text "Welcome" is visible'])await assert.rejects(compileNative(source,'ios','on',{inputs:{},auth:{}},remote,new AbortController().signal,[]),/fixture references for private inputs/);assert.equal(requests,0);
+  for(const goal of ['Never tap "Delete account"; tap "Cancel".','Do not click "Publish"; tap "Back".','Continue without tapping "Buy now".','Be careful not to tap "Delete account"; tap "Cancel".','Refrain from clicking "Submit order"; tap "Back".','Do anything but tap "Delete account"; tap "Cancel".','Do anything other than click "Delete account"; tap "Cancel".','Under no circumstances tap "Delete account"; tap "Cancel".'])await assert.rejects(compileNative(`Case: Negative intent\nGoal: ${goal}\nExpect: text "Safe" is visible`,'ios','on',{inputs:{},auth:{}},remote,new AbortController().signal,[]),/Negative native action clauses/);assert.equal(requests,0);
+  for(const goal of ['Tap "Delete account" only if a confirmation dialog is visible, otherwise tap "Cancel".','Tap "Catalog" if the app is ready, otherwise tap "Back".'])await assert.rejects(compileNative(`Case: Conditional intent\nGoal: ${goal}\nExpect: text "Settings" is visible`,'ios','on',{inputs:{},auth:{}},remote,new AbortController().signal,[]),/Conditional native actions/);assert.equal(requests,0);
+  for(const intent of ['Only if the badge is visible, tap "Add to cart".','When the badge is visible, tap "Add to cart".','Tap "Add to cart" when the badge appears.','After the badge appears, tap "Add to cart".']){
+    await assert.rejects(compileNative(`Case: Conditional intent\nGoal: ${intent}\nExpect: text "Quantity: 1" is visible`,'ios','on',{inputs:{},auth:{}},remote,new AbortController().signal,[]),/Conditional native actions/);
+    await assert.rejects(compileNative(`Case: Conditional continuation\nGoal: Inspect cart\n${intent}\nExpect: text "Quantity: 1" is visible`,'ios','on',{inputs:{},auth:{}},remote,new AbortController().signal,[]),/one line per Case, Goal, Step, or Expect/);
+  }assert.equal(requests,0);
+  for(const source of ['Case: Private\nGoal: Password\nhunter2\nExpect: text "Welcome" is visible','Case: Password\nhunter2\nGoal: Inspect status\nExpect: text "Welcome" is visible','Case: Private\nGoal: Password\nhunter2, tap "Sign in".\nExpect: text "Welcome" is visible','Case: Negation\nGoal: Never\ntap "Add to cart".\nExpect: text "Quantity: 1" is visible','Case: Negation\nGoal: Inspect cart. Do not\ntap "Add to cart".\nExpect: text "Quantity: 1" is visible'])await assert.rejects(compileNative(source,'ios','on',{inputs:{},auth:{}},remote,new AbortController().signal,[]),/one line per Case, Goal, Step, or Expect/);assert.equal(requests,0);
+  for(const literal of ['when','if','unless','after']){const safe=await compileNative(`Case: Query literal\nGoal: Filter the catalog\nStep: Fill "Search products" with "${literal}"\nExpect: text "${literal}" is visible`,'ios','off',{inputs:{},auth:{}},noModel,new AbortController().signal,[]);assert.equal(safe.cases[0].blockedReason,null,literal);assert.equal(safe.cases[0].steps[0].value,literal);}
+  for(const goal of ['Sign in as alice.','Authenticate alice.','Sign in as alice with correct-horse.','Use correct-horse to sign in as alice.','Authenticate alice / correct-horse.','Sign in as alice with hunter2.','Use hunter2 to sign in as alice.','Authenticate alice / hunter2.','Sign in as alice with letmein.','Use letmein to sign in as alice.','Authenticate alice / letmein.'])await assert.rejects(compileNative(`Case: Login\nGoal: ${goal}\nExpect: text "Welcome" is visible`,'ios','on',{inputs:{},auth:{}},remote,new AbortController().signal,[]),/fixture references for private inputs/);assert.equal(requests,0);
+  for(const mode of ['on','off'])for(const goal of ['Use a as PIN.','Use ab as PIN.','Use q as Code.','Use hi for recovery code.','Enter 7 into Password.','For OTP, use z.','Use ab on PIN.','Enter ab with OTP.','Use ab with the recovery code.','Use ab on the one-time code field.','Use q near the PIN.'])await assert.rejects(compileNative(`Case: Short private input\nGoal: ${goal}\nStep: Tap "Sign in"\nExpect: text "Welcome" is visible`,'ios',mode,{inputs:{},auth:{}},remote,new AbortController().signal,[]),/fixture references for private inputs/);assert.equal(requests,0);
+  for(const [goal,field] of [['Use a PIN to sign in.','PIN'],['Enter the correct password.','Password'],['Use the provided recovery code.','Recovery code']]){
+    const safe=await compileNative(`Case: Safe login\nGoal: ${goal}\nStep: Fill "${field}" with @private\nStep: Tap "Sign in"\nExpect: text "Welcome" is visible`,'ios','off',{inputs:{private:{value:'qZ'}},auth:{}},noModel,new AbortController().signal,['qZ']);
+    assert.equal(safe.cases[0].blockedReason,null,goal);
+    for(const mode of ['on','off'])await assert.rejects(compileNative(`Case: Safe login\nGoal: ${goal}\nStep: Tap "Sign in"\nExpect: text "Welcome" is visible`,'ios',mode,{inputs:{},auth:{}},remote,new AbortController().signal,[]),/matching fixture-bound Fill Step/);
+  }
+  assert.equal(requests,0);
+  for(const title of ['Login alice','Login alice correct-horse','Authenticate alice / correct-horse','Sign in as alice with correct-horse','Login alice hunter2','Authenticate alice / hunter2','Sign in as alice with hunter2','Login alice letmein','Authenticate alice / letmein','Sign in as alice with letmein','Password hunter2','OTP 123','Pin 123','Access token abc','Password reset: hunter2','Password reset with hunter2','OTP test with 123','Token refresh hunter2'])await assert.rejects(compileNative(`Case: ${title}\nGoal: Inspect login safely\nExpect: text "Welcome" is visible`,'ios','on',{inputs:{},auth:{}},remote,new AbortController().signal,[]),/fixture references for private inputs/);assert.equal(requests,0);
+  for(const goal of ['Password hunter2, then tap "Sign in".','Use passphrase hunter2, then tap "Sign in".'])await assert.rejects(compileNative(`Case: Safe\nGoal: ${goal}\nExpect: text "Welcome" is visible`,'ios','on',{inputs:{},auth:{}},remote,new AbortController().signal,[]),/fixture references for private inputs/);assert.equal(requests,0);
+  for(const name of ['Email login','OTP login','Token refresh','Secret target']){const safe=await compileNative(`Case: ${name}\nGoal: Sign in safely\nStep: Fill "Email" with @email\nStep: Fill "Password" with @password\nStep: Tap "Sign in"\nExpect: text "Welcome" is visible`,'ios','off',{inputs:{email:{value:'local'},password:{value:'local'}},auth:{}},noModel,new AbortController().signal,[]);assert.equal(safe.cases[0].blockedReason,null,name);}
+  for(const name of ['Login flow','Login success','Login page','Login with valid credentials']){const safe=await compileNative(`Case: ${name}\nGoal: Sign in safely\nStep: Fill "Email" with @email\nStep: Fill "Password" with @password\nStep: Tap "Sign in"\nExpect: text "Welcome" is visible`,'ios','off',{inputs:{email:{value:'local'},password:{value:'local'}},auth:{}},noModel,new AbortController().signal,[]);assert.equal(safe.cases[0].blockedReason,null,name);}
+  for(const name of ['Password reset flow','OTP login','Token refresh']){const safe=await compileNative(`Case: ${name}\nGoal: Verify password login\nStep: Fill "Email" with @email\nStep: Fill "Password" with @password\nStep: Tap "Sign in"\nExpect: text "Welcome" is visible`,'ios','off',{inputs:{email:{value:'local'},password:{value:'local'}},auth:{}},noModel,new AbortController().signal,[]);assert.equal(safe.cases[0].blockedReason,null,name);}
+  for(const name of ['Cart after login','Search after login','Shopping cart after login','Login and add lamp']){const safe=await compileNative(`Case: ${name}\nGoal: Fill "Email" with @email, fill "Password" with @password, then tap "Sign in".\nStep: Fill "Email" with @email\nStep: Fill "Password" with @password\nStep: Tap "Sign in"\nExpect: text "Welcome" is visible`,'ios','off',{inputs:{email:{value:'local'},password:{value:'local'}},auth:{}},noModel,new AbortController().signal,[]);assert.equal(safe.cases[0].blockedReason,null,name);}
+  for(const goal of ['Verify email login','Verify password login','Verify OTP login','Verify token refresh','Verify secret entry']){const safe=await compileNative(`Case: Safe login\nGoal: ${goal}\nStep: Fill "Email" with @email\nStep: Fill "Password" with @password\nStep: Tap "Sign in"\nExpect: text "Welcome" is visible`,'ios','off',{inputs:{email:{value:'local'},password:{value:'local'}},auth:{}},noModel,new AbortController().signal,[]);assert.equal(safe.cases[0].blockedReason,null,goal);}
+});
+test('native metadata subprocesses receive only toolchain variables and obey cancellation',async()=>{
+ const env=nativeToolEnvironment({PATH:'/bin',HOME:'/home/test',ANDROID_HOME:'/sdk',OPENROUTER_API_KEY:'secret',E2E_TEST_EMAIL:'private@example.test',CUSTOM_LOGIN_ID:'arbitrary-fixture-secret',PASSWORD:'private'});
+ assert.deepEqual(env,{PATH:'/bin',HOME:'/home/test',ANDROID_HOME:'/sdk'});assert.ok(!JSON.stringify(env).includes('secret'));assert.ok(!JSON.stringify(env).includes('private'));
+ await assert.rejects(nativeVersions({platform:'ios',app,device:'sim',baseline:'preserve'},AbortSignal.abort()),error=>error?.name==='AbortError');
+});
+test('recovery and multi-factor codes require fixtures before any provider or report sees a literal',async()=>{
+  let requests=0;const remote=provider({fetchImpl:async()=>{requests++;throw Error('Private source reached provider');}}),noModel={stats:{plannerRequests:0},fetchImpl:()=>{throw Error('Private source reached provider');}};
+  for(const target of ['Recovery code','Recovery-code','Recovery phrase','Backup code','Backup-code','Seed phrase','Security answer','Security question answer','Authenticator code','Access code','MFA code','2FA code','two-factor code','2-factor code','SMS code','TOTP','Code']){
+    const source=`Case: Private input\nGoal: Sign in safely\nStep: Fill "${target}" with "123456"\nExpect: text "Welcome" is visible`;
+    await assert.rejects(compileNative(source,'ios','off',{inputs:{},auth:{}},noModel,new AbortController().signal,[]),/fixture references for private inputs/);
+    assert.throws(()=>validateSuite({version:2,platform:'ios',cases:[{name:'Private input',source,goal:'Sign in safely',auth:null,steps:[{action:'fill',target,value:'123456',fixture:null}],assertions:[{...assertion('visible','Welcome',true),afterStep:0}],blockedReason:null}]}),/fixture reference/);
+  }
+  for(const goal of ['Tap "Verify" with recovery code 123456.','Tap "Verify" with recovery-code 123456.','Enter my recovery code to sign in.','Fill "Backup code" with "123456", then tap "Verify".','Enter "123456" into "Authenticator code", then tap "Verify".','Tap "Verify" with recovery phrase correct-horse.','Use correct-horse as the seed phrase.','Use correct-horse as security answer.','Enter correct-horse into "Recovery phrase", then tap "Verify".','Tap "Verify" with two-factor code 123456.','Tap "Verify" with 2-factor code 123456.','Tap "Verify" with SMS code 123456.','Tap "Verify" with security question answer canaryval.','Tap "Verify" with code 123456.'])
+    await assert.rejects(compileNative(`Case: Private prose\nGoal: ${goal}\nExpect: text "Welcome" is visible`,'ios','on',{inputs:{},auth:{}},remote,new AbortController().signal,[]),/fixture references for private inputs/);
+  for(const title of ['Recovery phrase correct-horse','Seed phrase correct-horse','Recovery-code-123456'])
+    await assert.rejects(compileNative(`Case: ${title}\nGoal: Inspect status\nExpect: text "Welcome" is visible`,'ios','on',{inputs:{},auth:{}},remote,new AbortController().signal,[]),/fixture references for private inputs/);
+  assert.equal(requests,0);
+  const safe=await compileNative('Case: Recovery code test\nGoal: Fill "Recovery code" with @recovery, then tap "Verify".\nStep: Fill "Recovery code" with @recovery\nStep: Tap "Verify"\nExpect: text "Welcome" is visible','ios','off',{inputs:{recovery:{value:'123456'}},auth:{}},noModel,new AbortController().signal,['123456']);
+  assert.equal(safe.cases[0].blockedReason,null);assert.equal(safe.cases[0].steps[0].fixture,'recovery');assert.ok(!JSON.stringify(safe).includes('123456'));
+  const phrase=await compileNative('Case: Recovery-code test\nGoal: Fill "Recovery phrase" with @recovery, then tap "Verify".\nStep: Fill "Recovery phrase" with @recovery\nStep: Tap "Verify"\nExpect: text "Welcome" is visible','ios','off',{inputs:{recovery:{value:'correct-horse'}},auth:{}},noModel,new AbortController().signal,['correct-horse']);
+  assert.equal(phrase.cases[0].blockedReason,null);assert.ok(!JSON.stringify(phrase).includes('correct-horse'));
+  for(const title of ['2-factor code flow','two-factor code flow','Sign-in code flow']){
+    const described=await compileNative(`Case: ${title}\nGoal: Sign in safely\nStep: Fill "2-factor code" with @recovery\nStep: Tap "Verify"\nExpect: text "Welcome" is visible`,'ios','off',{inputs:{recovery:{value:'123456'}},auth:{}},noModel,new AbortController().signal,['123456']);
+    assert.equal(described.cases[0].blockedReason,null,title);
+  }
+  const code=await compileNative('Case: Code entry\nGoal: Fill "Code" with @otp, then tap "Verify".\nStep: Fill "Code" with @otp\nStep: Tap "Verify"\nExpect: text "Welcome" is visible','ios','off',{inputs:{otp:{value:'123456'}},auth:{}},noModel,new AbortController().signal,['123456']);
+  assert.equal(code.cases[0].blockedReason,null);
+  for(const expectation of ['value of id "Code" equals "123"','number in id "PIN" equals 123','value of id "OTP" equals "abc"','value of id "Recovery code" equals "123"','field "Security answer" equals "hi"']){
+    const source=`Case: Private comparison\nGoal: Tap "Verify"\nStep: Tap "Verify"\nExpect: ${expectation}`;
+    await assert.rejects(compileNative(source,'ios','on',{inputs:{},auth:{}},remote,new AbortController().signal,[]),/fixture references for private inputs/);
+    await assert.rejects(compileNative(source,'ios','off',{inputs:{},auth:{}},noModel,new AbortController().signal,[]),/fixture references for private inputs/);
+    const check=nativeExpectation(expectation);
+    assert.throws(()=>validateSuite({version:2,platform:'ios',cases:[{name:'Private comparison',source,goal:'Tap "Verify"',auth:null,steps:[{action:'click',target:'Verify',value:null,fixture:null}],assertions:[{...check,afterStep:0}],blockedReason:null}]}),/private input values/);
+  }
+});
+test('freeform native goals cannot silently omit an empty or reset action',async()=>{
+  let requests=0;const source=goal=>`Case: Empty basket\nGoal: ${goal}\nExpect: text "Your cart is empty" is visible`;
+  const remote=provider({fetchImpl:async()=>{requests++;throw Error('Unbound action reached provider');}});
+  for(const goal of ['Tap "Cart" and empty the basket.','Tap "Cart" then empty your basket.','Tap "Cart" and empty out the shopping cart.','Tap "Cart" and wipe the items.','Tap "Cart" and discard the contents.','Tap "Cart" and reset the app.','Tap "Settings" and turn on notifications.','Tap "Settings" and turn notifications on.','Tap "Settings" and activate notifications.','Tap "Settings" and deactivate notifications.','Tap "Settings" and configure notifications.','Tap "Settings" and sign out.','Tap "Settings" and log out.','Tap "Settings" and logout.','Tap "Settings" and disconnect the account.','Tap "Settings" and export the report.','Tap "Settings" and register an account.','Tap "Settings" and unlink the account.','Tap "Settings"; unlink the account.','Tap "Settings", unlink the account.','Tap "Settings". Unlink the account.','Tap "Settings" — unlink the account.','Tap "Settings" / unlink the account.','Tap "Settings" & unlink the account.','Tap "Settings" → unlink the account.','Tap "Settings" followed by unlink the account.','Tap "Settings" plus unlink the account.','Tap "Settings" after you unlink the account.','Tap "Settings" and then unlink the account.','Tap "Settings" and switch.','Unlink the account and tap "Settings".','Unlink the account; tap "Settings".'])
+    await assert.rejects(compileNative(source(goal),'ios','on',{inputs:{},auth:{}},remote,new AbortController().signal,[]),/freeform native action could not be bound safely/);
+  assert.equal(requests,0);
+  for(const mode of ['on','off']){
+    await assert.rejects(compileNative('Case: Empty basket\nGoal: Tap "Cart" then empty your basket.\nStep: Tap "Cart"\nExpect: text "Your cart is empty" is visible','ios',mode,{inputs:{},auth:{}},remote,new AbortController().signal,[]),/Goal action could not be matched safely/);
+    await assert.rejects(compileNative('Case: Notifications\nGoal: Tap "Settings" then turn on notifications.\nStep: Tap "Settings"\nExpect: text "Notifications on" is visible','ios',mode,{inputs:{},auth:{}},remote,new AbortController().signal,[]),/Goal action could not be matched safely/);
+    await assert.rejects(compileNative('Case: Sign out\nGoal: Tap "Settings" and sign out.\nStep: Tap "Settings"\nExpect: text "Signed out" is visible','ios',mode,{inputs:{},auth:{}},remote,new AbortController().signal,[]),/Goal action could not be matched safely/);
+    await assert.rejects(compileNative('Case: Unlink\nGoal: Tap "Settings" and unlink the account.\nStep: Tap "Settings"\nExpect: text "Account removed" is visible','ios',mode,{inputs:{},auth:{}},remote,new AbortController().signal,[]),/Goal action could not be matched safely/);
+    await assert.rejects(compileNative('Case: Unlink\nGoal: Tap "Settings"; unlink the account.\nStep: Tap "Settings"\nExpect: text "Account removed" is visible','ios',mode,{inputs:{},auth:{}},remote,new AbortController().signal,[]),/Goal action could not be matched safely/);
+    await assert.rejects(compileNative('Case: Unlink\nGoal: Tap "Settings" → unlink the account.\nStep: Tap "Settings"\nExpect: text "Account removed" is visible','ios',mode,{inputs:{},auth:{}},remote,new AbortController().signal,[]),/Goal action could not be matched safely/);
+    await assert.rejects(compileNative('Case: Missing action\nGoal: Tap "Cart", then tap "Remove all".\nStep: Tap "Cart"\nExpect: text "Your cart is empty" is visible','ios',mode,{inputs:{},auth:{}},remote,new AbortController().signal,[]),/Goal action is missing or out of order/);
+  }
+  assert.equal(requests,0);
+  const ordinary=source('Tap "Cart" and verify the cart is empty.');
+  const plan={version:2,platform:'ios',cases:[{name:'Empty basket',source:ordinary,goal:'Tap "Cart" and verify the cart is empty.',auth:null,steps:[{action:'click',target:'Cart',value:null,fixture:null}],assertions:[{...assertion('visible','Your cart is empty',true),afterStep:0}],blockedReason:null}]};
+  const safe=await compileNative(ordinary,'ios','on',{inputs:{},auth:{}},provider({fetchImpl:async()=>{requests++;return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(plan)}}],usage:{cost:0}});}}),new AbortController().signal,[]);
+  assert.deepEqual(safe,plan);assert.equal(requests,1);
+  const explicit=await compileNative('Case: Empty basket\nGoal: Tap "Cart" and verify the cart is empty.\nStep: Tap "Cart"\nExpect: text "Your cart is empty" is visible','ios','off',{inputs:{},auth:{}},remote,new AbortController().signal,[]);
+  assert.equal(explicit.cases[0].blockedReason,null);assert.equal(requests,1);
+  for(const mode of ['on','off'])for(const expectation of ['text "Your cart." is visible','text "Your cart is empty" is absent','text "No products available" is visible','text "Cart is empty? No" is visible','text "Your cart is empty - but there is a lamp" is visible'])for(const steps of ['', 'Step: Tap "Cart"\n']){
+    await assert.rejects(compileNative(`Case: Empty basket\nGoal: Tap "Cart" and verify the cart is empty.\n${steps}Expect: ${expectation}`,'ios',mode,{inputs:{},auth:{}},remote,new AbortController().signal,[]),/explicit visible text expectation that states the cart is empty/);
+  }
+  for(const mode of ['on','off'])await assert.rejects(compileNative('Case: Wrong milestone\nGoal: Tap "Cart" and verify the cart is empty.\nStep: Tap "Catalog"\nExpect: text "Your cart is empty" is visible\nStep: Tap "Cart"\nExpect: text "Your cart." is visible','ios',mode,{inputs:{},auth:{}},remote,new AbortController().signal,[]),/explicit visible text expectation that states the cart is empty/);
+  const synonym=await compileNative('Case: Empty basket\nGoal: Tap "Cart" and verify the cart is empty.\nStep: Tap "Cart"\nExpect: text "No items in your cart" is visible','ios','off',{inputs:{},auth:{}},remote,new AbortController().signal,[]);
+  assert.equal(synonym.cases[0].blockedReason,null);
+  for(const mode of ['on','off']){
+    const literal=await compileNative('Case: Literal search\nGoal: Fill "Search products" with "verify cart is empty", then tap "Cart".\nStep: Fill "Search products" with "verify cart is empty"\nStep: Tap "Cart"\nExpect: text "Your cart." is visible','ios',mode,{inputs:{},auth:{}},remote,new AbortController().signal,[]);
+    assert.equal(literal.cases[0].blockedReason,null);
+  }
+  assert.equal(requests,1);
+});
+test('the 20 published mobile language goals pass the freeform preflight on both platforms',async()=>{
+  const goals=[
+    'Tap "Catalog".','Tap "Settings" to inspect the preferences.','Replace "Search products" with "lamp", then dismiss the keyboard.',
+    'Enable the "Notifications" switch.','Disable the "Notifications" switch.','Scroll down once.','Scroll up once.','Go back once.',
+    'Dismiss the keyboard.','Relaunch the app, keeping its data.','Wait for the exact text "Ready" to appear.',
+    'Tap "Open Desk Lamp", then tap "Add to cart".','Tap "Increase Desk Lamp quantity".','Tap "Remove Desk Lamp".',
+    'Replace "Search products" with "café ☕".','Replace "Search products" with "Lamp - 2.0".',
+    'Fill "Email" using @email, fill "Password" using @password, then tap "Sign in".',
+    'Fill "Email" using @email, fill "Password" using @invalidPassword, then tap "Sign in" with those invalid credentials.',
+    'Tap "Open Desk Lamp", tap "Add to cart", relaunch the app, then tap "Cart".','Replace "Search products" with "".',
+  ];
+  const fixtures={inputs:{email:{value:'local'},password:{value:'local'},invalidPassword:{value:'local'}},auth:{}};
+  for(const platform of ['ios','android'])for(const goal of goals){
+    const source=`Case: Language flow\nGoal: ${goal}\nExpect: text "Ready" is visible`,steps=authoredNativeSteps(source);
+    assert.ok(steps.length,goal);
+    const expected={version:2,platform,cases:[{name:'Language flow',source,goal,auth:null,steps,assertions:[{...nativeExpectation('text "Ready" is visible'),afterStep:steps.length-1}],blockedReason:null}]};
+    let requests=0;
+    const result=await compileNative(source,platform,'on',fixtures,provider({fetchImpl:async()=>{requests++;return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(expected)}}],usage:{cost:0}});}}),new AbortController().signal,[]);
+    assert.equal(requests,1,goal);assert.deepEqual(result,expected,goal);
+  }
+});
+test('an internal device command timeout cannot dispatch on a replacement worker during cleanup',async t=>{
+ const connection=new DeviceConnection('ios'),worker=new EventEmitter();let kills=0,commands=[];
+ // A real worker keeps IPC alive; the mock needs a live handle for AbortSignal.timeout.
+ const workerLiveness=setInterval(()=>{},1000);
+ t.after(()=>clearInterval(workerLiveness));
+ worker.kill=()=>{kills++;return true;};worker.send=(message,callback)=>{commands.push(message.command);callback?.();if(message.command==='close')setImmediate(()=>worker.emit('message',{id:message.id,value:{}}));return true;};
+ connection.start=()=>{connection.worker=worker;return worker;};connection.worker=worker;connection.ownsSession=true;
+ const outside=new AbortController();await assert.rejects(connection.call('snapshot',{},outside.signal,10),/deadline/);assert.equal(outside.signal.aborted,false);
+ await assert.rejects(connection.call('screenshot',{},outside.signal,100),/shutting down/);await connection.close();
+ assert.deepEqual(commands,['snapshot','close']);assert.ok(kills>=1);assert.equal(connection.worker,undefined);assert.equal(connection.ownsSession,false);
+});
+test('repeated cancellation reuses the in-flight native session cleanup',async()=>{
+ const connection=new DeviceConnection('ios'),oldWorker=new EventEmitter(),replacement=new EventEmitter(),closed=[];oldWorker.kill=()=>true;replacement.kill=()=>true;
+ connection.worker=oldWorker;connection.ownsSession=true;connection.closeOnWorker=async worker=>{closed.push(worker===oldWorker?'old':'replacement');return false;};
+ connection.start=()=>{connection.worker=replacement;return replacement;};replacement.send=(message,callback)=>{callback?.();if(message.command==='close')setTimeout(()=>{const wait=connection.pending.get(message.id);connection.pending.delete(message.id);wait?.resolve({});},100);return true;};
+ connection.interrupt();const stopping=connection.stopping;await new Promise(resolve=>setTimeout(resolve,85));assert.equal(connection.worker,replacement);assert.equal(connection.pending.size,1);
+ connection.interrupt();assert.equal(connection.stopping,stopping);await connection.close();assert.deepEqual(closed,['old']);assert.equal(connection.worker,undefined);assert.equal(connection.ownsSession,false);assert.equal(connection.stopping,undefined);
+});
+test('native verification distinguishes an actual mismatch from incomplete or ambiguous evidence',()=>{
+  const state=snapshot([node(0,'Application','Example'),node(1,'StaticText','Desk Lamp',{parentIndex:0}),node(2,'StaticText','Desk Lamp',{parentIndex:1}),node(3,'StaticText','Total',{value:'72.00',identifier:'total',parentIndex:0})]);
+  assert.equal(nativeCheck(state,assertion('count','Desk Lamp',1)).passed,true);
+  assert.equal(nativeCheck(state,assertion('number','Total',72,'label')).passed,true);
+  assert.equal(nativeCheck(state,assertion('number','Total',36,'label')).passed,false);
+  for(const incomplete of [{...state,truncated:true},{...state,visibility:{...state.visibility,partial:true}},{...state,nodes:[...state.nodes,node(4,'ScrollView','List',{hiddenContentBelow:true})]}]) assert.throws(()=>nativeCheck(incomplete,assertion('absent','AirPods',false)),BlockedError);
+  assert.throws(()=>nativeCheck({...state,nodes:[...state.nodes,node(4,'StaticText','Total',{value:'36.00'})]},assertion('number','Total',72,'label')),BlockedError);
+  assert.throws(()=>nativeCheck({...state,nodes:[node(0,'StaticText','Total',{value:'72.00 USD nonsense'})]},assertion('number','Total',72,'label')),BlockedError);
+  assert.throws(()=>nativeCheck(state,{...assertion('absent','AirPods',false),target:{...assertion('absent','AirPods',false).target,within:'Missing region'}}),BlockedError);
+  assert.equal(nativeCheck(snapshot([node(0,'Switch','Notifications',{value:'1',selected:false})]),assertion('checked','Notifications',true,'label')).passed,true);
+  assert.throws(()=>nativeCheck(snapshot([node(0,'android.widget.Switch','Notifications',{selected:false})]),assertion('checked','Notifications',false,'label')),BlockedError);
+  assert.equal(nativeCheck(snapshot([node(0,'StaticText','Email',{value:'Email'})]),assertion('visible','Email',true,'label')).passed,false);
+  assert.equal(nativeCheck(snapshot([node(0,'android.widget.EditText','Search',{value:'Search',hintShowing:true})]),assertion('value','Search','','label')).passed,true);
+});
+test('iOS SDK quality omissions require two fresh complete, matching app trees before negative checks',async()=>{
+  const nodes=[node(0,'Application','Example'),node(1,'StaticText','Desk Lamp',{parentIndex:0})];
+  const ios=(elements=nodes,generation=7)=>({...snapshot(elements),snapshotQuality:undefined,refsGeneration:generation,
+    warnings:['iOS snapshot acquisition does not provide hittability evidence; regular snapshots omit unverified hittability while raw snapshots preserve supplied facts.'],
+    snapshotDiagnostics:{stats:{backends:{xctest:1}}}});
+  const first=ios(nodes,7),second=ios(nodes,8);
+  assert.throws(()=>normalizeNative(first,app,[]),BlockedError);
+  assert.throws(()=>nativeCheck(first,assertion('absent','AirPods',false)),BlockedError);
+  const driver=new MobileDriver({platform:'ios',app,device:'sim',baseline:'preserve'},[]);driver.ready=true;
+  let reads=0;driver.connection.call=async command=>{assert.equal(command,'snapshot');return ++reads===1?first:second;};
+  const observed=await driver.observe(AbortSignal.timeout(1000));
+  assert.equal(reads,2);assert.equal(observed.native,second);
+  assert.equal(nativeCheck(observed.native,assertion('absent','AirPods',false)).passed,true);
+  assert.equal(nativeCheck(observed.native,assertion('count','Desk Lamp',1)).passed,true);
+  await driver.close();
+  const invalid=[
+    ios([nodes[0]],7),{...ios(),truncated:true},
+    {...ios(),visibility:{...ios().visibility,partial:true}},
+    {...ios(),visibility:{...ios().visibility,totalNodeCount:1}},
+    {...ios(),visibility:{...ios().visibility,reasons:['unknown region']}},
+    {...ios(),warnings:['iOS snapshot acquisition does not report hierarchy completeness; provider-side depth or child limits may omit nodes.']},
+    {...ios(),snapshotQuality:{state:'sparse',backend:'xctest'}},
+    {...ios(),snapshotDiagnostics:undefined},
+    ios([...nodes,node(2,'ScrollView','List',{hiddenContentBelow:true,parentIndex:0})]),
+  ];
+  for(const raw of invalid){
+    const blocked=new MobileDriver({platform:'ios',app,device:'sim',baseline:'preserve'},[]);blocked.ready=true;
+    blocked.connection.call=async()=>({...raw,refsGeneration:8});
+    await assert.rejects(blocked.observe(AbortSignal.timeout(280)));
+    await blocked.close();
+    assert.throws(()=>nativeCheck(raw,assertion('absent','AirPods',false)),BlockedError);
+  }
+  for(const variant of ['changed-tree','same-generation','wrong-app']){
+    const blocked=new MobileDriver({platform:'ios',app,device:'sim',baseline:'preserve'},[]);blocked.ready=true;let captures=0;
+    blocked.connection.call=async()=>{captures++;return captures%2===1?first:variant==='changed-tree'?ios([nodes[0],node(1,'StaticText','Other',{parentIndex:0})],8):variant==='same-generation'?ios(nodes,7):{...second,appBundleId:'dev.other.app'};};
+    await assert.rejects(blocked.observe(AbortSignal.timeout(300)));
+    await blocked.close();
+  }
+});
+test('iOS corroboration discards private pixels appearing in the second capture',async()=>{
+  const directory=await mkdtemp(join(tmpdir(),'jev-native-private-corrob-'));
+  try{
+    const safe=[node(0,'Application','Example'),node(1,'Button','Done',{parentIndex:0})];
+    const privateNodes=[node(0,'Application','Example'),node(1,'TextField','Email',{parentIndex:0})];
+    const ios=(nodes,generation)=>({...snapshot(nodes),snapshotQuality:undefined,refsGeneration:generation,warnings:['iOS snapshot acquisition does not provide hittability evidence; regular snapshots omit unverified hittability while raw snapshots preserve supplied facts.'],snapshotDiagnostics:{stats:{backends:{xctest:1}}}});
+    const path=join(directory,'private.png'),driver=new MobileDriver({platform:'ios',app,device:'sim',baseline:'preserve'},[]);driver.ready=true;
+    let snapshots=0,pixels=0;
+    driver.connection.call=async(command)=>{
+      if(command==='snapshot')return ++snapshots<=2?ios(safe,snapshots):snapshots===3?ios(privateNodes,snapshots):ios(safe,snapshots);
+      if(command==='screenshot'){pixels++;await writeFile(path,'unredacted pixels');return{path,identifiers:{appBundleId:app,deviceId:'sim'}};}
+      throw Error(command);
+    };
+    await assert.rejects(driver.screenshot(path,AbortSignal.timeout(2500)),/ownership could not be confirmed/);
+    assert.equal(pixels,1);assert.equal(snapshots,3);await assert.rejects(readFile(path),/ENOENT/);
+    await driver.close();
+  }finally{await rm(directory,{recursive:true,force:true});}
+});
+test('native switch actions cannot succeed when the state does not change',async()=>{
+ const state=snapshot([node(0,'Application','Example'),node(1,'Switch','Notifications',{identifier:'notifications',checked:false,parentIndex:0})]),d=new MobileDriver({platform:'ios',app,device:'sim',baseline:'preserve'},[]);d.ready=true;let presses=0;
+ d.connection.call=async command=>{if(command==='snapshot')return state;if(command==='press'){presses++;return{verification:'confirmed'};}throw Error(command);};
+ const observation=normalizeNative(state,app,[]),control=observation.controls.find(item=>item.role==='checkbox');await assert.rejects(d.execute(observation,control,{action:'check',target:'Notifications',value:null,fixture:null},null,AbortSignal.timeout(5000)),/not confirmed/);assert.equal(presses,1);
+});
+test('unsafe model-selected navigation is blocked before native dispatch',async()=>{
+ const state=snapshot([node(0,'Application','Example'),node(1,'Button','Buy now',{identifier:'buy-now',parentIndex:0})]),observation=normalizeNative(state,app,[]),unsafe=observation.controls[0];
+ const plan={version:2,platform:'android',cases:[{name:'Safe target',source:'Case: Safe target',goal:'Open details',auth:null,steps:[{action:'click',target:'Details',value:null,fixture:null}],assertions:[{...assertion('visible','Done',true),afterStep:0}],blockedReason:null}]};
+ const original={open:MobileDriver.prototype.open,observe:MobileDriver.prototype.observe,execute:MobileDriver.prototype.execute,close:MobileDriver.prototype.close};let dispatches=0;
+ try{MobileDriver.prototype.open=async function(){this.ready=true;};MobileDriver.prototype.observe=async()=>observation;MobileDriver.prototype.execute=async()=>{dispatches++;};MobileDriver.prototype.close=async()=>{};
+  const result=await runSuite({platform:'android',app,device:'not-a-real-device',plan,outputDirectory:false,timeoutMs:10000,decide:async()=>({target:'none',navigation:unsafe.id})});assert.equal(result.verdict,'BLOCKED');assert.equal(result.cases[0].actions.length,0);assert.equal(dispatches,0);
+ }finally{Object.assign(MobileDriver.prototype,original);}
+});
+test('native action evidence omits pre-dispatch rejection and marks unknown post-dispatch outcomes',async()=>{
+ const state=snapshot([node(0,'Application','Example'),node(1,'Button','Continue',{identifier:'continue',parentIndex:0})]),observation=normalizeNative(state,app,[]),control=observation.controls[0];
+ const plan={version:2,platform:'android',cases:[{name:'Dispatch evidence',source:'Case: Dispatch evidence',goal:'Continue once',auth:null,steps:[{action:'click',target:'Continue',value:null,fixture:null}],assertions:[{...assertion('visible','Done',true),afterStep:0}],blockedReason:null}]};
+ const original={open:MobileDriver.prototype.open,observe:MobileDriver.prototype.observe,execute:MobileDriver.prototype.execute,close:MobileDriver.prototype.close};
+ try{MobileDriver.prototype.open=async function(){this.ready=true;this.target.device='sim';};MobileDriver.prototype.observe=async()=>observation;MobileDriver.prototype.close=async()=>{};
+  for(const dispatched of [false,true]){MobileDriver.prototype.execute=async function(_o,_c,_s,_v,_signal,onDispatch){if(dispatched)onDispatch();throw new BlockedError(dispatched?'Lost response after dispatch.':'Target changed before dispatch.');};const result=await runSuite({platform:'android',app,device:'sim',plan,outputDirectory:false,timeoutMs:10000,decide:async()=>({target:control.id,navigation:'blocked'})});assert.equal(result.verdict,'BLOCKED');assert.equal(result.cases[0].actions.length,dispatched?1:0);if(dispatched)assert.equal(result.cases[0].actions[0].outcome,'uncertain');}
+ }finally{Object.assign(MobileDriver.prototype,original);}
+});
+test('Android checked evidence must match one app, identifier, class and exact bounds',()=>{
+ const state=snapshot([node(0,'android.widget.Switch','Notifications',{identifier:'notifications',selected:false})]);
+ const entry='<node package="dev.example.app" resource-id="notifications" class="android.widget.Switch" bounds="[0,0][400,800]" checkable="true" checked="true" />';
+ const xml=`<hierarchy>${entry}</hierarchy>`;
+ assert.equal(nativeCheck(androidCheckedEvidence(state,xml,app),assertion('checked','Notifications',true,'label')).passed,true);
+ for(const bad of [xml.replace('dev.example.app','dev.other'),xml.replace('[400,800]','[401,800]'),xml.replace('checkable="true"','checkable="false"'),xml.replace('checked="true"','checked="unknown"'),`<hierarchy>${entry}${entry}</hierarchy>`,xml.slice(0,-10)]) assert.throws(()=>nativeCheck(androidCheckedEvidence(state,bad,app),assertion('checked','Notifications',false,'label')),BlockedError);
+});
+test('native normalization omits field values and masks known secrets without inventing action capabilities',()=>{
+  const secret='unique-private-fixture-123';
+  const state=snapshot([node(0,'Application','Example'),node(1,'TextField','Email',{value:secret,identifier:secret,parentIndex:0}),node(2,'SecureTextField','Password',{value:secret,parentIndex:0}),node(3,'Button',`Account ${secret}`,{parentIndex:0}),node(4,'StaticText','Not a button',{parentIndex:0})]);
+  const normalized=normalizeNative(state,app,[secret]);assert.equal(normalized.controls.length,3);assert.ok(!normalized.text.includes(secret));assert.ok(!JSON.stringify(normalized.controls.map(({fingerprint,...c})=>c)).includes(secret));assert.deepEqual(normalized.controls[0].capabilities,['fill']);
+  assert.throws(()=>normalizeNative({...state,appBundleId:'dev.other.app'},app,[secret]),BlockedError);
+  assert.throws(()=>normalizeNative({...state,identifiers:{...state.identifiers,deviceId:'other-device'}},app,[secret],'sim'),/selected device/);
+  assert.throws(()=>normalizeNative({...state,identifiers:{...state.identifiers,package:'dev.other.app'}},app,[secret],'sim'),/observed app/);
+  assert.throws(()=>normalizeNative({...state,identifiers:{...state.identifiers,serial:'other-device'}},app,[secret],'sim'),/selected device/);
+  assert.throws(()=>normalizeNative({...state,systemSurfaceOnly:true},app,[secret]),/operating system/);assert.throws(()=>normalizeNative({...state,androidSnapshot:{systemSurfaceOnly:true}},app,[secret]),/operating system/);assert.throws(()=>normalizeNative({...state,iosSystemSurfaceBundleId:'com.apple.SafariViewService'},app,[secret]),/operating system/);
+  const bounded=normalizeNative(snapshot([node(0,'Application','Example'),node(1,'Button','L'.repeat(260),{type:'Button'+'T'.repeat(44),identifier:'I'.repeat(320),parentIndex:0})]),app,[]).controls[0];
+  assert.deepEqual([bounded.label.length,bounded.type.length,bounded.identifier.length],[240,40,300]);
+});
+test('native dispatch blocks when an emoji-only ancestor changes the target entity',async()=>{
+ const early=normalizeNative(snapshot([node(0,'Application','Jev Shop'),node(1,'Button','Cart',{identifier:'Cart',parentIndex:0})]),app,[]);
+ const later=snapshot([node(0,'Application','Jev Shop'),node(1,'StaticText','🔴',{parentIndex:0}),node(2,'Button','Cart',{identifier:'Cart',parentIndex:1})]);
+ const control=early.controls[0],fresh=normalizeNative(later,app,[]).controls[0];assert.equal(control.context,'Jev Shop');assert.notEqual(control.fingerprint,fresh.fingerprint);
+ const named=normalizeNative(snapshot([node(0,'Application','Jev Shop'),node(1,'StaticText','Another record',{parentIndex:0}),node(2,'Button','Cart',{identifier:'Cart',parentIndex:1})]),app,[]).controls[0];assert.notEqual(control.fingerprint,named.fingerprint);
+ const driver=new MobileDriver({platform:'ios',app,device:'sim',baseline:'preserve'},[]);driver.ready=true;driver.connection.interrupt=()=>{};let presses=0;driver.connection.call=async command=>{if(command==='snapshot')return later;if(command==='press'){presses++;return{};}throw Error(command);};
+ await assert.rejects(driver.execute(early,control,{action:'click',target:'Cart',value:null,fixture:null},null,AbortSignal.timeout(1000)),/changed/);assert.equal(presses,0);await driver.close();
+});
+test('relaunch waits for a late native accessibility group before selecting a control',async()=>{
+ const partial=snapshot([node(0,'Application','Jev Shop'),node(1,'Button','Cart',{identifier:'Cart',parentIndex:0})]);
+ const complete=snapshot([node(0,'Application','Jev Shop'),node(1,'Other','Catalog',{parentIndex:0}),node(2,'Button','Cart',{identifier:'Cart',parentIndex:1})]);
+ const driver=new MobileDriver({platform:'ios',app,device:'sim',baseline:'preserve'},[]);driver.ready=true;driver.selection={platform:'ios',udid:'sim'};
+ let captures=0,presses=0;driver.connection.call=async command=>{
+  if(command==='open')return{appBundleId:app,device:{id:'sim',identifiers:{deviceId:'sim'}},identifiers:{appBundleId:app,deviceId:'sim'}};
+  if(command==='snapshot')return ++captures<=3?partial:complete;
+  if(command==='press'){presses++;return{};}
+  throw Error(command);
+ };
+ await driver.direct({action:'relaunch',target:null,value:null,fixture:null},AbortSignal.timeout(5000));
+ const observation=await driver.observe(AbortSignal.timeout(1000)),control=observation.controls[0];
+ assert.equal(control.context,'Jev Shop / Catalog');assert.ok(captures>=5);
+ await driver.execute(observation,control,{action:'click',target:'Cart',value:null,fixture:null},null,AbortSignal.timeout(1000));
+ assert.equal(presses,1);await driver.close();
+});
+test('native global actions verify the owned app surface before dispatch',async()=>{
+  for(const action of ['back','scroll']){const driver=new MobileDriver({platform:'ios',app,device:'sim',baseline:'preserve'},[]);driver.ready=true;let mutations=0,snapshots=0;driver.connection.call=async command=>{if(command==='snapshot'){snapshots++;return{...snapshot([node(0,'Application','Example'),node(1,'Button','Allow',{parentIndex:0})]),systemSurfaceOnly:true};}if(command===action){mutations++;return{};}throw Error(command);};await assert.rejects(driver.direct({action,target:action==='scroll'?'down':null,value:null,fixture:null},AbortSignal.timeout(1000)),/operating system/);assert.equal(snapshots,1);assert.equal(mutations,0);await driver.close();}
+});
+test('bounded native controls round-trip through the generated replay plan',async()=>{
+  const directory=await mkdtemp(join(tmpdir(),'jev-native-flow-bounds-'));
+  try{
+    const control=normalizeNative(snapshot([node(0,'Application','Example'),node(1,'Button','L'.repeat(260),{type:'Button'+'T'.repeat(44),identifier:'I'.repeat(320),parentIndex:0})]),app,[]).controls[0];
+    const semantic={tag:control.tag,role:control.role,label:control.label,context:control.context,type:control.type,identifier:control.identifier};
+    const plan={version:2,platform:'ios',cases:[{name:'Bounded',source:'Case: Bounded',goal:'Continue',auth:null,steps:[{action:'click',target:'Continue',value:null,fixture:null}],assertions:[assertion('visible','Done',true)],blockedReason:null}]};
+    const target={platform:'ios',app,device:'sim',baseline:'preserve'};
+    await writeReport({version:2,id:'bounded',startedAt:new Date(0).toISOString(),url:`app://${app}`,verdict:'PASS',canceled:false,durationMs:1,model:{requests:0,plannerRequests:0,jevRequests:0,cost:0,models:[]},plan,reportDirectory:directory,target,cases:[{name:'Bounded',goal:'Continue',verdict:'PASS',reason:'Checked.',checks:[{assertion:plan.cases[0].assertions[0],passed:true,observed:true}],actions:[{step:0,action:'click',target:control.label,replay:false,outcome:'confirmed'}],durationMs:1,screenshot:null,flow:[{step:0,navigation:false,control:semantic}]}]},directory);
+    const saved=await readSavedPlan(join(directory,'plan.json'));assert.equal(saved.flows[0][0].control.label.length,240);assert.equal(saved.flows[0][0].control.identifier.length,300);
+  }finally{await rm(directory,{recursive:true,force:true});}
+});
+test('saved native replay waits for a late control after relaunch without calling Jev',async()=>{
+ const visible=normalizeNative(snapshot([node(0,'Application','Example'),node(1,'Button','Cart',{identifier:'cart',parentIndex:0})]),app,[]);
+ const control=visible.controls[0],semantic={tag:control.tag,role:control.role,label:control.label,context:control.context,type:control.type,identifier:control.identifier};
+ const plan={version:2,platform:'android',cases:[{name:'Saved cart',source:'Case: Saved cart',goal:'Verify cart after restart',auth:null,steps:[{action:'relaunch',target:null,value:null,fixture:null},{action:'click',target:'Cart',value:null,fixture:null}],assertions:[{...assertion('visible','Done',true),afterStep:1}],blockedReason:null}]};
+ const target={platform:'android',app,device:'sim',baseline:'preserve'},flows=[[{step:0,navigation:false,control:null},{step:1,navigation:false,control:semantic}]];
+ const replay={version:2,plan,target,flows,hash:savedHash(plan,target,flows)};
+ const methods=['open','direct','observe','execute','check','close'],original=Object.fromEntries(methods.map(name=>[name,MobileDriver.prototype[name]]));let snapshots=0,presses=0,modelCalls=0;
+ try{
+  MobileDriver.prototype.open=async function(){this.ready=true;};
+  MobileDriver.prototype.direct=async()=>{};
+  MobileDriver.prototype.observe=async()=>++snapshots<=2?{...visible,controls:[]}:visible;
+  MobileDriver.prototype.execute=async(_observation,selected,_step,_value,_signal,onDispatch)=>{assert.equal(selected.identifier,'cart');presses++;onDispatch();};
+  MobileDriver.prototype.check=async expected=>({assertion:expected,passed:true,observed:true});
+  MobileDriver.prototype.close=async()=>{};
+  const result=await runSuite({replay,platform:'android',app,device:'sim',outputDirectory:false,decide:async()=>{modelCalls++;throw Error('Late control must replay without Jev.');}});
+  assert.equal(result.verdict,'PASS',JSON.stringify({reason:result.cases.map(test=>test.reason),snapshots,presses,modelCalls,actions:result.cases[0].actions}));assert.equal(result.model.requests,0);assert.equal(modelCalls,0);assert.equal(presses,1);assert.equal(snapshots,3);assert.equal(result.cases[0].actions[1].replay,true);
+ }finally{for(const name of methods)MobileDriver.prototype[name]=original[name];}
+});
+test('rejected private mobile prose is redacted from every persisted report artifact',async()=>{
+  const directory=await mkdtemp(join(tmpdir(),'jev-native-private-source-')),secret='correct-horse-private-9173';let requests=0;
+  try{
+    const result=await runSuite({platform:'android',app:'dev.never.opened',device:'none',casesText:`Case: Literal password\nGoal: Use ${secret} as password, then tap "Sign in".\nExpect: text "Welcome" is visible`,planner:'on',outputDirectory:directory,fetchImpl:async()=>{requests++;throw Error('Provider must not be called');}});
+    assert.equal(result.verdict,'BLOCKED');assert.equal(requests,0);assert.equal(result.cases[0].actions.length,0);
+    for(const name of ['report.json','plan.json','report.html'])assert.ok(!(await readFile(join(directory,name),'utf8')).includes(secret),name);
+    const persisted=JSON.parse(await readFile(join(directory,'report.json'),'utf8'));assert.equal(persisted.durationMs,result.durationMs);assert.deepEqual(persisted.timings,result.timings);assert.ok(result.timings.artifact>=1);
+    assert.equal(result.plan.cases[0].source,'[PRIVATE INPUT REDACTED]');
+    const negative=await runSuite({platform:'android',app:'dev.never.opened',device:'none',casesText:`Case: Private negative ${secret}\nGoal: Never tap "Delete account". Use ${secret} as password.\nExpect: text "Welcome" is visible`,planner:'on',outputDirectory:directory,fetchImpl:async()=>{requests++;throw Error('Provider must not be called');}});
+    assert.equal(negative.verdict,'BLOCKED');assert.equal(requests,0);assert.equal(negative.plan.cases[0].source,'[PRIVATE INPUT REDACTED]');assert.ok(!JSON.stringify(negative).includes(secret));
+    for(const name of ['report.json','plan.json','report.html'])assert.ok(!(await readFile(join(directory,name),'utf8')).includes(secret),name);
+    const recovery=await runSuite({platform:'android',app:'dev.never.opened',device:'none',casesText:'Case: Recovery code\nGoal: Tap "Verify" with recovery code 491827.\nExpect: text "Welcome" is visible',planner:'on',outputDirectory:directory,fetchImpl:async()=>{requests++;throw Error('Provider must not be called');}});
+    assert.equal(recovery.verdict,'BLOCKED');assert.equal(requests,0);assert.equal(recovery.plan.cases[0].source,'[PRIVATE INPUT REDACTED]');
+    for(const name of ['report.json','plan.json','report.html'])assert.ok(!(await readFile(join(directory,name),'utf8')).includes('491827'),name);
+    const short=await runSuite({platform:'android',app:'dev.never.opened',device:'none',casesText:'Case: Short PIN\nGoal: Use qZ as PIN.\nStep: Tap "Sign in"\nExpect: text "Welcome" is visible',planner:'on',outputDirectory:directory,fetchImpl:async()=>{requests++;throw Error('Provider must not be called');}});
+    assert.equal(short.verdict,'BLOCKED');assert.equal(requests,0);assert.equal(short.plan.cases[0].source,'[PRIVATE INPUT REDACTED]');
+    assert.ok(!JSON.stringify(short).includes('qZ'));
+    for(const name of ['report.json','plan.json','report.html'])assert.ok(!(await readFile(join(directory,name),'utf8')).includes('qZ'),name);
+  }finally{await rm(directory,{recursive:true,force:true});}
+});
+test('Android typing requires one focused input from the same app and exact geometry',()=>{
+ const input=node(0,'android.widget.EditText','Search',{identifier:'search'});
+ const entry='<node package="dev.example.app" resource-id="search" class="android.widget.EditText" bounds="[0,0][400,800]" focused="true" />';
+ const xml=`<hierarchy>${entry}</hierarchy>`;
+ assert.equal(androidFocusedEvidence(input,xml,app),true);
+ for(const bad of [xml.replace('dev.example.app','dev.other'),xml.replace('[400,800]','[401,800]'),xml.replace('focused="true"','focused="false"'),`<hierarchy>${entry}${entry}</hierarchy>`,xml.slice(0,-10)])assert.equal(androidFocusedEvidence(input,bad,app),false);
+});
+test('native device selection never silently chooses duplicate names or a physical phone',()=>{
+  const device=(id,name,extra={})=>({id,name,platform:'ios',kind:'simulator',target:'mobile',booted:true,identifiers:{},...extra});
+  const devices=[device('a','iPhone'),device('b','iPhone'),device('c','Real',{kind:'device'})];
+  assert.throws(()=>selectDevice(devices,'ios','iPhone'),BlockedError);assert.throws(()=>selectDevice(devices,'ios'),BlockedError);assert.throws(()=>selectDevice(devices,'ios','c'),BlockedError);assert.equal(selectDevice(devices,'ios','b').id,'b');assert.throws(()=>selectDevice([device('a','iPhone',{claimedBy:{session:'other'}})],'ios','a'),BlockedError);
+});
+test('prose compiler rejects reordered actions, exchanged input bindings and early checks',async()=>{
+ const source='Case: Login\nGoal: Fill "Email" using @email, fill "Password" using @password, then tap "Sign in".\nExpect: text "Welcome" is visible';
+ const steps=authoredNativeSteps(source);
+ assert.deepEqual(steps.map(s=>[s.action,s.target,s.fixture]),[['fill','Email','email'],['fill','Password','password'],['click','Sign in',null]]);
+ const plan={version:2,platform:'ios',cases:[{name:'Login',source,goal:source.split('\n')[1].slice(6),auth:null,steps,assertions:[{...assertion('visible','Welcome',true),afterStep:2}],blockedReason:null}]};
+ const fixtures={inputs:{email:{value:'local-only-email'},password:{value:'local-only-password'}},auth:{}};
+ const compile=p=>compileNative(source,'ios','on',fixtures,provider({fetchImpl:async()=>Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(p)}}],usage:{cost:0}})}),new AbortController().signal,[]);
+ assert.deepEqual(await compile(plan),plan);
+ for(const change of [p=>p.cases[0].steps.reverse(),p=>{p.cases[0].steps[0].fixture='password';p.cases[0].steps[1].fixture='email';},p=>p.cases[0].steps.splice(1,1),p=>p.cases[0].assertions[0].afterStep=0]){
+  const p=structuredClone(plan);change(p);await assert.rejects(compile(p),BlockedError);
+ }
+ const tripSource='Case: Trip\nGoal: In "Origin" use @origin and in "Destination" use @destination, then tap "Search".\nExpect: text "Results" is visible';
+ const tripSteps=authoredNativeSteps(tripSource);assert.deepEqual(tripSteps.map(s=>[s.target,s.fixture]),[['Origin','origin'],['Destination','destination'],['Search',null]]);
+ const trip={version:2,platform:'ios',cases:[{name:'Trip',source:tripSource,goal:tripSource.split('\n')[1].slice(6),auth:null,steps:structuredClone(tripSteps),assertions:[{...assertion('visible','Results',true),afterStep:2}],blockedReason:null}]};
+ const tripFixtures={inputs:{origin:{value:'SFO'},destination:{value:'LAX'}},auth:{}};
+ const compileTrip=p=>compileNative(tripSource,'ios','on',tripFixtures,provider({fetchImpl:async()=>Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(p)}}],usage:{cost:0}})}),new AbortController().signal,[]);
+ assert.deepEqual(await compileTrip(trip),trip);
+ const swapped=structuredClone(trip);swapped.cases[0].steps[0].fixture='destination';swapped.cases[0].steps[1].fixture='origin';await assert.rejects(compileTrip(swapped),/added or changed/);
+ const catalogSource='Case: Catalog\nGoal: Tap "Catalog".\nExpect: text "Welcome" is visible',catalogSteps=authoredNativeSteps(catalogSource);
+ const invented={version:2,platform:'ios',cases:[{name:'Catalog',source:catalogSource,goal:'Tap "Catalog".',auth:null,steps:[{action:'click',target:'Settings',value:null,fixture:null},...catalogSteps],assertions:[{...assertion('visible','Welcome',true),afterStep:1}],blockedReason:null}]};
+ await assert.rejects(compileNative(catalogSource,'ios','on',{inputs:{},auth:{}},provider({fetchImpl:async()=>Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify(invented)}}],usage:{cost:0}})}),new AbortController().signal,[]),/added or changed/);
+ const changedGoal=structuredClone(plan);changedGoal.cases[0].goal='Checkout and payment completed';await assert.rejects(compile(changedGoal),/changed a case identity, goal/);
+ for(const goal of ['Tap "Catalog", then open "Settings".','Tap "Catalog", then delete account.']){
+  let calls=0;await assert.rejects(compileNative(`Case: Open settings\nGoal: ${goal}\nExpect: text "Settings" is visible`,'ios','on',{inputs:{},auth:{}},provider({fetchImpl:async()=>{calls++;throw Error('No provider call allowed for unbound action');}}),new AbortController().signal,[]),/freeform native action could not be bound safely|unsupported capability/);assert.equal(calls,0);
+ }
+});
+test('installed app IDs are not mistaken for build paths and recording fails closed',async()=>{
+ const makeDriver=()=>{const d=new MobileDriver({platform:'ios',app:'com.example.app',device:'sim',baseline:'preserve'},[]);d.connection.interrupt=()=>{};return d;};
+ const opened=makeDriver(),calls=[];opened.connection.call=async(command,args)=>{calls.push([command,args]);if(command==='devices')return[{id:'sim',name:'Owned',platform:'ios',kind:'simulator',target:'mobile',booted:true,identifiers:{}}];if(command==='open')return{device:{id:'sim'},appBundleId:'com.example.app'};return{};};
+ await opened.open(AbortSignal.timeout(1000));await opened.close();assert.ok(!calls.some(([command])=>command==='install'));assert.ok(calls.some(([command,args])=>command==='open'&&args.app==='com.example.app'));
+ const contradictoryOpen=makeDriver();contradictoryOpen.connection.call=async command=>command==='devices'?[{id:'sim',name:'Owned',platform:'ios',kind:'simulator',target:'mobile',booted:true,identifiers:{}}]:command==='open'?{appBundleId:'com.example.app',appId:'dev.other',device:{id:'sim',identifiers:{deviceId:'sim',udid:'other-device'}}}:{};await assert.rejects(contradictoryOpen.open(AbortSignal.timeout(1000)),/different app\/device/);await contradictoryOpen.close();
+ const nestedWrongOpen=makeDriver();nestedWrongOpen.connection.call=async command=>command==='devices'?[{id:'sim',name:'Owned',platform:'ios',kind:'simulator',target:'mobile',booted:true,identifiers:{}}]:command==='open'?{appBundleId:'com.example.app',device:{id:'sim',identifiers:{appBundleId:'dev.other',deviceId:'sim'}}}:{};await assert.rejects(nestedWrongOpen.open(AbortSignal.timeout(1000)),/different app\/device/);await nestedWrongOpen.close();
+ const directory=await mkdtemp(join(tmpdir(),'jev-native-recording-'));
+ try{
+  const buildPath=join(directory,'Fixture.app');await mkdir(buildPath);const built=new MobileDriver({platform:'ios',app:buildPath,device:'sim',baseline:'preserve'},[]),buildCalls=[];built.connection.interrupt=()=>{};built.connection.call=async(command,args)=>{buildCalls.push([command,args]);if(command==='devices')return[{id:'sim',name:'Owned',platform:'ios',kind:'simulator',target:'mobile',booted:true,identifiers:{}}];if(command==='install')return{bundleId:'dev.fixture.installed',identifiers:{deviceId:'sim'}};if(command==='open')return{device:{id:'sim'},appBundleId:'dev.fixture.installed'};return{};};
+  await built.open(AbortSignal.timeout(1000));await built.close();assert.equal(built.target.app,buildPath);assert.equal(built.resolvedApp,'dev.fixture.installed');assert.ok(buildCalls.some(([command,args])=>command==='install'&&args.appPath===buildPath));
+  const sdkOmittedDevice=new MobileDriver({platform:'ios',app:buildPath,device:'sim',baseline:'preserve'},[]);sdkOmittedDevice.connection.call=async command=>command==='devices'?[{id:'sim',name:'Owned',platform:'ios',kind:'simulator',target:'mobile',booted:true,identifiers:{}}]:command==='install'?{bundleId:'dev.fixture.installed',identifiers:{appBundleId:'dev.fixture.installed'}}:command==='open'?{device:{id:'sim'},appBundleId:'dev.fixture.installed'}:{};
+  await sdkOmittedDevice.open(AbortSignal.timeout(1000));await sdkOmittedDevice.close();
+  const wrongInstall=new MobileDriver({platform:'ios',app:buildPath,device:'sim',baseline:'preserve'},[]);wrongInstall.connection.call=async command=>command==='devices'?[{id:'sim',name:'Owned',platform:'ios',kind:'simulator',target:'mobile',booted:true,identifiers:{}}]:command==='install'?{bundleId:'dev.fixture.installed',identifiers:{deviceId:'other-device'}}:{};await assert.rejects(wrongInstall.open(AbortSignal.timeout(1000)),/selected device and app identity/);await wrongInstall.close();
+  const wrongRelaunch=makeDriver();wrongRelaunch.connection.call=async command=>command==='open'?{device:{id:'other-device'},appBundleId:'dev.other'}:{};await assert.rejects(wrongRelaunch.direct({action:'relaunch',target:null,value:null,fixture:null},AbortSignal.timeout(1000)),/relaunch selected a different app\/device/);await wrongRelaunch.close();
+  const unsafe=makeDriver(),unsafePath=join(directory,'unsafe.mp4'),unsafeChunk=join(directory,'unsafe.part-002.mp4'),unsafeTelemetry=join(directory,'unsafe.gesture-telemetry.json'),unrelated=join(directory,'keep-me.txt');unsafe.connection.call=async(command,args)=>{if(command==='record'&&args.action==='start')return{recording:'started',outPath:unsafePath,showTouches:false,recordingScope:'app',activeSessionApp:{bundleId:'com.example.app'}};if(command==='record')return{recording:'stopped',outPath:unsafePath,telemetryPath:unsafeTelemetry,artifacts:[{artifactType:'screen-recording-chunk',localPath:unsafeChunk},{artifactType:'screen-recording-telemetry',path:unsafeTelemetry},{artifactType:'screen-recording-chunk',localPath:unrelated}],chunks:[{index:2,path:unsafeChunk},{index:3,path:unrelated}],durationMs:1000,capturedDurationMs:1000,showTouches:false,recordingScope:'app',activeSessionApp:{bundleId:'com.example.app'},recorder:'confirmed',nativePathDisposition:'retired'};if(command==='snapshot')return snapshot([node(0,'TextField','Private input')]);throw Error(command);};
+  await unsafe.startRecording(unsafePath,AbortSignal.timeout(1000));await Promise.all([writeFile(unsafePath,'private pixels'),writeFile(unsafeChunk,'private chunk'),writeFile(unsafeTelemetry,'private telemetry'),writeFile(unrelated,'unrelated user file')]);assert.equal(await unsafe.stopRecording(AbortSignal.timeout(1000)),null);await unsafe.close();for(const path of [unsafePath,unsafeChunk,unsafeTelemetry])await assert.rejects(readFile(path),/ENOENT/);assert.equal(await readFile(unrelated,'utf8'),'unrelated user file');assert.match(unsafe.recordingDiscardedReason,/final screen/);
+  const malformed=makeDriver(),malformedPath=join(directory,'malformed.mp4'),unexpectedPath=join(directory,'unexpected.mp4');malformed.connection.call=async(command,args)=>{if(command==='record'&&args.action==='start')return{recording:'started',outPath:malformedPath,showTouches:false,recordingScope:'app',activeSessionApp:{bundleId:'com.example.app'}};if(command==='record'){await writeFile(unexpectedPath,'unexpected private pixels');return{recording:'stopped',outPath:unexpectedPath,durationMs:1000,showTouches:false};}if(command==='snapshot')return snapshot([node(0,'Button','Done')]);throw Error(command);};
+  await malformed.startRecording(malformedPath,AbortSignal.timeout(1000));await writeFile(malformedPath,'private pixels');await assert.rejects(malformed.stopRecording(AbortSignal.timeout(1000)),/invalid artifact identity/);await malformed.close();await assert.rejects(readFile(malformedPath),/ENOENT/);assert.equal(await readFile(unexpectedPath,'utf8'),'unexpected private pixels');
+  const lifecycle=makeDriver(),lifecyclePath=join(directory,'lifecycle.mp4'),safeState={...snapshot([node(0,'Application','Example'),node(1,'Button','Done',{parentIndex:0})]),appBundleId:'com.example.app',identifiers:{appBundleId:'com.example.app',deviceId:'sim'}};lifecycle.connection.call=async(command,args)=>{if(command==='record'&&args.action==='start')return{recording:'started',outPath:lifecyclePath,showTouches:false,recordingScope:'app',activeSessionApp:{bundleId:'com.example.app'}};if(command==='record')return{recording:'stopped',outPath:lifecyclePath,durationMs:1000,capturedDurationMs:1000,showTouches:false,recorder:'unconfirmed',nativePathDisposition:'pending'};if(command==='snapshot')return safeState;throw Error(command);};
+  await lifecycle.startRecording(lifecyclePath,AbortSignal.timeout(1000));await writeFile(lifecyclePath,'unconfirmed pixels');await assert.rejects(lifecycle.stopRecording(AbortSignal.timeout(1000)),/unsafe lifecycle evidence/);await lifecycle.close();await assert.rejects(readFile(lifecyclePath),/ENOENT/);
+  const uncertain=makeDriver(),uncertainPath=join(directory,'uncertain.mp4'),uncertainChunk=join(directory,'uncertain.part-001.mp4'),uncertainTelemetry=join(directory,'uncertain.gesture-telemetry.json');uncertain.connection.call=async(command,args)=>{if(command==='record'&&args.action==='start'){await Promise.all([writeFile(uncertainPath,'possibly finalized pixels'),writeFile(uncertainChunk,'private chunk'),writeFile(uncertainTelemetry,'private telemetry')]);throw new BlockedError('Lost start response');}throw Error(command);};
+  await assert.rejects(uncertain.startRecording(uncertainPath,AbortSignal.timeout(1000)),/Lost start response/);assert.equal(await readFile(uncertainPath,'utf8'),'possibly finalized pixels');await uncertain.close();for(const path of [uncertainPath,uncertainChunk,uncertainTelemetry])await assert.rejects(readFile(path),/ENOENT/);assert.match(uncertain.recordingDiscardedReason,/not confirmed/);
+  const lostStop=makeDriver(),lostStopPath=join(directory,'lost-stop.mp4'),lostStopChunk=join(directory,'lost-stop.part-001.mp4'),lostStopTelemetry=join(directory,'lost-stop.gesture-telemetry.json');lostStop.ready=true;lostStop.connection.call=async(command,args)=>{if(command==='record'&&args.action==='start')return{recording:'started',outPath:lostStopPath,showTouches:false,recordingScope:'app',activeSessionApp:{bundleId:'com.example.app'}};if(command==='snapshot')return safeState;if(command==='record'){await Promise.all([writeFile(lostStopPath,'possibly finalized pixels'),writeFile(lostStopChunk,'private chunk'),writeFile(lostStopTelemetry,'private telemetry')]);throw new BlockedError('Lost stop response');}throw Error(command);};
+  await lostStop.startRecording(lostStopPath,AbortSignal.timeout(1000));await assert.rejects(lostStop.stopRecording(AbortSignal.timeout(1000)),/Lost stop response/);await lostStop.close();for(const path of [lostStopPath,lostStopChunk,lostStopTelemetry])await assert.rejects(readFile(path),/ENOENT/);
+  const protectedRecording=makeDriver(),protectedPath=join(directory,'protected.mp4'),protectedChunk=join(directory,'protected.part-001.mp4');let protectedCalls=0;await writeFile(protectedChunk,'preexisting user file');protectedRecording.connection.call=async()=>{protectedCalls++;throw Error('must not dispatch');};await assert.rejects(protectedRecording.startRecording(protectedPath,AbortSignal.timeout(1000)),/already contains files reserved/);assert.equal(protectedCalls,0);assert.equal(await readFile(protectedChunk,'utf8'),'preexisting user file');await protectedRecording.close();
+  const stale=makeDriver(),stalePath=join(directory,'stale.mp4');await writeFile(stalePath,'OLD SECRET VIDEO');stale.connection.call=async(command,args)=>{if(command==='record'&&args.action==='start')return{recording:'started',outPath:stalePath,showTouches:false,recordingScope:'app',activeSessionApp:{bundleId:'com.example.app'}};if(command==='record')return{recording:'stopped',outPath:stalePath,durationMs:1000,showTouches:false,recordingScope:'app',activeSessionApp:{bundleId:'com.example.app'},recorder:'confirmed',nativePathDisposition:'retired'};if(command==='snapshot')return safeState;throw Error(command);};
+  await stale.startRecording(stalePath,AbortSignal.timeout(1000));await assert.rejects(readFile(stalePath),/ENOENT/);await assert.rejects(stale.stopRecording(AbortSignal.timeout(1000)),/fresh usable artifact/);await stale.close();
+  const screenshot=makeDriver(),screenshotPath=join(directory,'stale.png');let screenshotArgs;screenshot.ready=true;await writeFile(screenshotPath,'OLD SECRET IMAGE');screenshot.connection.call=async(command,args)=>{if(command==='snapshot')return safeState;if(command==='screenshot'){screenshotArgs=args;return{path:screenshotPath,identifiers:{appBundleId:'com.example.app',deviceId:'sim'}};}throw Error(command);};await assert.rejects(screenshot.screenshot(screenshotPath,AbortSignal.timeout(1000)),/fresh local artifact/);assert.equal(screenshotArgs.surface,'app');await assert.rejects(readFile(screenshotPath),/ENOENT/);await screenshot.close();
+  const mismatch=makeDriver(),mismatchPath=join(directory,'mismatch.png');mismatch.ready=true;mismatch.connection.call=async(command,args)=>{if(command==='snapshot')return safeState;if(command==='screenshot'){await writeFile(mismatchPath,'EXTERNAL PIXELS');return{path:mismatchPath,identifiers:{appBundleId:'dev.other',deviceId:'other-device'}};}throw Error(command);};await assert.rejects(mismatch.screenshot(mismatchPath,AbortSignal.timeout(1000)),/mismatched app\/device identity/);await assert.rejects(readFile(mismatchPath),/ENOENT/);await mismatch.close();
+  const contradictory=makeDriver(),contradictoryPath=join(directory,'contradictory.png');contradictory.ready=true;contradictory.connection.call=async(command,args)=>{if(command==='snapshot')return safeState;if(command==='screenshot'){await writeFile(contradictoryPath,'WRONG PIXELS');return{path:contradictoryPath,identifiers:{appBundleId:'com.example.app',package:'dev.other',deviceId:'sim',serial:'other-device'}};}throw Error(command);};await assert.rejects(contradictory.screenshot(contradictoryPath,AbortSignal.timeout(1000)),/mismatched app\/device identity/);await assert.rejects(readFile(contradictoryPath),/ENOENT/);await contradictory.close();
+  const wrongPath=makeDriver(),requested=join(directory,'requested.png'),ownedWrong=join(directory,'logo.png');wrongPath.ready=true;wrongPath.connection.call=async(command,args)=>{if(command==='snapshot')return safeState;if(command==='screenshot'){await writeFile(ownedWrong,'UNRELATED USER PIXELS');return{path:ownedWrong,identifiers:{appBundleId:'com.example.app',deviceId:'sim'}};}throw Error(command);};await assert.rejects(wrongPath.screenshot(requested,AbortSignal.timeout(1000)),/requested fresh local artifact/);await assert.rejects(readFile(requested),/ENOENT/);assert.equal(await readFile(ownedWrong,'utf8'),'UNRELATED USER PIXELS');await wrongPath.close();
+  const lost=makeDriver(),lostPath=join(directory,'lost.png');lost.ready=true;lost.connection.call=async command=>{if(command==='snapshot')return safeState;if(command==='screenshot'){await writeFile(lostPath,'UNVERIFIED PRIVATE PIXELS');throw Error('Lost screenshot response');}throw Error(command);};await assert.rejects(lost.screenshot(lostPath,AbortSignal.timeout(1000)),/Lost screenshot response/);await assert.rejects(readFile(lostPath),/ENOENT/);await lost.close();
+  for(const surface of [{systemSurfaceOnly:true},{iosSystemSurfaceBundleId:'com.apple.SafariViewService'}]){const system=makeDriver(),systemPath=join(directory,`system-${Object.keys(surface)[0]}.png`);let captures=0;system.ready=true;system.connection.call=async command=>{if(command==='snapshot')return{...safeState,...surface,nodes:[node(0,'Application','Example'),node(1,'Button','Allow',{parentIndex:0})]};if(command==='screenshot'){captures++;await writeFile(systemPath,'SYSTEM PIXELS');return{path:systemPath,identifiers:{appBundleId:'com.example.app',deviceId:'sim'}};}throw Error(command);};await assert.rejects(system.screenshot(systemPath,AbortSignal.timeout(1000)),/operating system/);assert.equal(captures,0);await assert.rejects(readFile(systemPath),/ENOENT/);await system.close();}
+ }finally{await rm(directory,{recursive:true,force:true});}
+});
+test('native saved plans bind platform/app/baseline and reject altered targets or checks',async()=>{
+  const plan=parseNative('Case: Persist\nGoal: Inspect saved state\nStep: Relaunch\nExpect: text "Saved" is visible','ios');
+  const target={platform:'ios',app,device:'a',baseline:'preserve'},saved={version:2,target,plan,hash:savedHash(plan,target),flows:[null]};
+  const directory=await mkdtemp(join(tmpdir(),'jev-native-contract-')),path=join(directory,'plan.json');
+  await writeFile(path,JSON.stringify(saved));assert.deepEqual(await readSavedPlan(path),saved);
+  await writeFile(path,JSON.stringify({...saved,target:{...target,app:'dev.other'}}));await assert.rejects(readSavedPlan(path),BlockedError);
+  await writeFile(path,JSON.stringify({...saved,plan:{...plan,cases:[{...plan.cases[0],assertions:[]} ]}}));await assert.rejects(readSavedPlan(path),BlockedError);
+  await writeFile(path,JSON.stringify({...saved,flows:[[{step:0,navigation:false,control:null}]]}));await assert.rejects(readSavedPlan(path),BlockedError);
+  await rm(directory,{recursive:true,force:true});
+});
+test('build-path replay pins the installed app identity before any native action',async()=>{
+ const platform=process.platform==='darwin'?'ios':'android',extension=platform==='ios'?'.app':'.apk';
+ const directory=await mkdtemp(join(tmpdir(),'jev-build-replay-')),build=join(directory,`Sample${extension}`);
+ const source='Case: Identity\nGoal: Inspect the owned app\nStep: Wait for text "Ready"\nExpect: text "Ready" is visible',plan=parseNative(source,platform);
+ const names=['open','direct','check','screenshot','close'],original=Object.fromEntries(names.map(name=>[name,MobileDriver.prototype[name]]));
+ const originalCwd=process.cwd();
+ let installed='dev.original.app',actions=0;
+ MobileDriver.prototype.open=async function(){this.appIdentity=installed;this.target.device='sim';};
+ MobileDriver.prototype.direct=async()=>{actions++;};
+ MobileDriver.prototype.check=async assertion=>({assertion,passed:true,observed:true});
+ MobileDriver.prototype.screenshot=async()=>false;
+ MobileDriver.prototype.close=async()=>{};
+ try{
+  const first=await runSuite({platform,app:build,device:'sim',plan,outputDirectory:directory});
+  assert.equal(first.verdict,'PASS');assert.equal(actions,1);assert.equal(first.target.appIdentity,'dev.original.app');
+  const saved=await readSavedPlan(join(directory,'plan.json'));assert.equal(saved.target.appIdentity,'dev.original.app');
+  installed='dev.replacement.app';
+  const rejected=await runSuite({replay:saved,outputDirectory:false});
+  assert.equal(rejected.verdict,'BLOCKED');assert.equal(rejected.cases[0].actions.length,0);assert.match(rejected.cases[0].reason,/different installed app identity/);assert.equal(actions,1);
+  const legacy={...saved,target:{...saved.target,appIdentity:undefined}};legacy.hash=savedHash(legacy.plan,legacy.target,legacy.flows);
+  await assert.rejects(runSuite({replay:legacy,outputDirectory:false}),/predates app identity binding/);
+  await mkdir(join(directory,`Bare${extension}`));process.chdir(directory);
+  const bare={...legacy,target:{...legacy.target,app:`Bare${extension}`}};bare.hash=savedHash(bare.plan,bare.target,bare.flows);
+  await assert.rejects(runSuite({replay:bare,outputDirectory:false}),/predates app identity binding/);
+  process.chdir(originalCwd);
+  await writeFile(join(directory,'tampered.json'),JSON.stringify({...saved,target:{...saved.target,appIdentity:'dev.replacement.app'}}));
+  await assert.rejects(readSavedPlan(join(directory,'tampered.json')),/integrity/);
+ }finally{process.chdir(originalCwd);Object.assign(MobileDriver.prototype,original);await rm(directory,{recursive:true,force:true});}
+});
+test('native report keeps duplicate unchecked milestones and zero/false observations distinct',async()=>{
+ const directory=await mkdtemp(join(tmpdir(),'jev-native-report-')),a={...assertion('visible','Ready',true),afterStep:0},plan={version:2,platform:'ios',cases:[{name:'Evidence',source:'Case: Evidence',goal:'Show evidence',auth:null,steps:[{action:'click',target:'Go',value:null,fixture:null}],assertions:[a,a],blockedReason:null}]};
+ const result={version:2,id:'id',startedAt:new Date(0).toISOString(),url:'app://dev.example.app',verdict:'BLOCKED',canceled:false,durationMs:1,model:{requests:0,plannerRequests:0,jevRequests:0,cost:0,models:[]},plan,reportDirectory:directory,target:{platform:'ios',app:'dev.example.app',device:'sim',baseline:'preserve'},versions:{backend:'test'},timings:{check:0},cases:[{name:'Evidence',goal:'Show evidence',verdict:'BLOCKED',reason:'Stopped after one check.',checks:[{assertion:a,passed:false,observed:false}],actions:[{step:0,action:'click',target:'Go',replay:false}],durationMs:1,screenshot:null,flow:[]}]};
+ try{await writeReport(result,directory);const html=await readFile(join(directory,'report.html'),'utf8');assert.equal(html.match(/NOT CHECKED/g)?.length,1);assert.match(html,/>false<\/td>/);assert.match(html,/Environment and full-run timings/);}finally{await rm(directory,{recursive:true,force:true});}
+});

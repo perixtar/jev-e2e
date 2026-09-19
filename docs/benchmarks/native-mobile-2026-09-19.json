@@ -1,0 +1,5425 @@
+{
+  "measuredAt": "2026-09-19T09:31:13.610Z",
+  "implementationSha": "96a275e8c452fbc40ad5b52d83c538664edc0b64",
+  "fixture": "examples/mobile-app (Jev Shop)",
+  "cases": "examples/mobile.cases",
+  "provider": "OpenRouter",
+  "evaluation": "Five cases × ten first attempts per mode and platform within two isolated registered 30-suite cohorts; no retries or omitted trials within those cohorts. Earlier host/SDK diagnostic attempts are excluded.",
+  "aggregate": [
+    {
+      "platform": "ios",
+      "passed": true,
+      "groups": {
+        "healthy": {
+          "PASS": 50,
+          "FAIL": 0,
+          "BLOCKED": 0,
+          "perFlow": [
+            10,
+            10,
+            10,
+            10,
+            10
+          ],
+          "medianMs": 27214,
+          "p95Ms": 30238,
+          "warmMedianMs": 27198,
+          "artifactMs": 40742,
+          "modelCost": 0.014206877999999996,
+          "plannerRequests": 0,
+          "jevRequests": 250
+        },
+        "broken": {
+          "PASS": 0,
+          "FAIL": 50,
+          "BLOCKED": 0,
+          "correctFAIL": 50,
+          "perFlow": [
+            10,
+            10,
+            10,
+            10,
+            10
+          ],
+          "medianMs": 29166,
+          "p95Ms": 31655,
+          "warmMedianMs": 29166,
+          "artifactMs": 37672,
+          "modelCost": 0.014237999999999995,
+          "plannerRequests": 0,
+          "jevRequests": 250
+        },
+        "replay": {
+          "PASS": 50,
+          "FAIL": 0,
+          "BLOCKED": 0,
+          "perFlow": [
+            10,
+            10,
+            10,
+            10,
+            10
+          ],
+          "medianMs": 25242,
+          "p95Ms": 36574,
+          "warmMedianMs": 25242,
+          "artifactMs": 36739,
+          "modelCost": 0.0016774800000000003,
+          "plannerRequests": 0,
+          "jevRequests": 30
+        }
+      },
+      "originalStrictEvaluatorPassed": false,
+      "strictZeroJevReplayDiagnosticPassed": false
+    },
+    {
+      "platform": "android",
+      "passed": true,
+      "groups": {
+        "healthy": {
+          "PASS": 50,
+          "FAIL": 0,
+          "BLOCKED": 0,
+          "perFlow": [
+            10,
+            10,
+            10,
+            10,
+            10
+          ],
+          "medianMs": 10438,
+          "p95Ms": 13104,
+          "warmMedianMs": 10570,
+          "artifactMs": 46702,
+          "modelCost": 0.012789000000000002,
+          "plannerRequests": 0,
+          "jevRequests": 259
+        },
+        "broken": {
+          "PASS": 0,
+          "FAIL": 50,
+          "BLOCKED": 0,
+          "correctFAIL": 50,
+          "perFlow": [
+            10,
+            10,
+            10,
+            10,
+            10
+          ],
+          "medianMs": 12356,
+          "p95Ms": 14939,
+          "warmMedianMs": 12396,
+          "artifactMs": 46160,
+          "modelCost": 0.012834864000000001,
+          "plannerRequests": 0,
+          "jevRequests": 261
+        },
+        "replay": {
+          "PASS": 50,
+          "FAIL": 0,
+          "BLOCKED": 0,
+          "perFlow": [
+            10,
+            10,
+            10,
+            10,
+            10
+          ],
+          "medianMs": 8700,
+          "p95Ms": 11121,
+          "warmMedianMs": 8704,
+          "artifactMs": 46486,
+          "modelCost": 0,
+          "plannerRequests": 0,
+          "jevRequests": 0
+        }
+      },
+      "originalStrictEvaluatorPassed": true,
+      "strictZeroJevReplayDiagnosticPassed": true
+    }
+  ],
+  "totalBilledApiCostUsd": 0.05574622199999998,
+  "trials": [
+    {
+      "platform": "ios",
+      "mode": "healthy",
+      "round": 1,
+      "baselineFaults": [
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy"
+      ],
+      "baselineVerified": true,
+      "verdict": "PASS",
+      "durationMs": 140990,
+      "phasesMs": {
+        "planning": 18,
+        "setup": 19761,
+        "observation": 4937,
+        "model": 9634,
+        "action": 101181,
+        "check": 1438,
+        "artifact": 3963,
+        "cleanup": 51
+      },
+      "model": {
+        "requests": 25,
+        "plannerRequests": 0,
+        "jevRequests": 25,
+        "cost": 0.001392678,
+        "models": [
+          "typesafe/jev-1.13-20260917"
+        ]
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "PASS",
+          "durationMs": 25569,
+          "passedChecks": 1,
+          "totalChecks": 1,
+          "failedChecks": []
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "PASS",
+          "durationMs": 28967,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "PASS",
+          "durationMs": 27631,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "PASS",
+          "durationMs": 28563,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "PASS",
+          "durationMs": 30238,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        }
+      ]
+    },
+    {
+      "platform": "ios",
+      "mode": "healthy",
+      "round": 2,
+      "baselineFaults": [
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy"
+      ],
+      "baselineVerified": true,
+      "verdict": "PASS",
+      "durationMs": 132485,
+      "phasesMs": {
+        "planning": 12,
+        "setup": 18001,
+        "observation": 2923,
+        "model": 7894,
+        "action": 98661,
+        "check": 1109,
+        "artifact": 3839,
+        "cleanup": 43
+      },
+      "model": {
+        "requests": 25,
+        "plannerRequests": 0,
+        "jevRequests": 25,
+        "cost": 0.0014237999999999998,
+        "models": [
+          "typesafe/jev-1.13-20260917"
+        ]
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "PASS",
+          "durationMs": 21370,
+          "passedChecks": 1,
+          "totalChecks": 1,
+          "failedChecks": []
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "PASS",
+          "durationMs": 27192,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "PASS",
+          "durationMs": 27144,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "PASS",
+          "durationMs": 26848,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "PASS",
+          "durationMs": 29916,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        }
+      ]
+    },
+    {
+      "platform": "ios",
+      "mode": "healthy",
+      "round": 3,
+      "baselineFaults": [
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy"
+      ],
+      "baselineVerified": true,
+      "verdict": "PASS",
+      "durationMs": 133732,
+      "phasesMs": {
+        "planning": 2,
+        "setup": 18780,
+        "observation": 2912,
+        "model": 7727,
+        "action": 99043,
+        "check": 1078,
+        "artifact": 4133,
+        "cleanup": 56
+      },
+      "model": {
+        "requests": 25,
+        "plannerRequests": 0,
+        "jevRequests": 25,
+        "cost": 0.0014237999999999998,
+        "models": [
+          "typesafe/jev-1.13-20260917"
+        ]
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "PASS",
+          "durationMs": 21464,
+          "passedChecks": 1,
+          "totalChecks": 1,
+          "failedChecks": []
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "PASS",
+          "durationMs": 27085,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "PASS",
+          "durationMs": 27425,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "PASS",
+          "durationMs": 27788,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "PASS",
+          "durationMs": 29967,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        }
+      ]
+    },
+    {
+      "platform": "ios",
+      "mode": "healthy",
+      "round": 4,
+      "baselineFaults": [
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy"
+      ],
+      "baselineVerified": true,
+      "verdict": "PASS",
+      "durationMs": 136010,
+      "phasesMs": {
+        "planning": 2,
+        "setup": 19411,
+        "observation": 2953,
+        "model": 8551,
+        "action": 99460,
+        "check": 1096,
+        "artifact": 4482,
+        "cleanup": 52
+      },
+      "model": {
+        "requests": 25,
+        "plannerRequests": 0,
+        "jevRequests": 25,
+        "cost": 0.0014237999999999998,
+        "models": [
+          "typesafe/jev-1.13-20260917"
+        ]
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "PASS",
+          "durationMs": 21166,
+          "passedChecks": 1,
+          "totalChecks": 1,
+          "failedChecks": []
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "PASS",
+          "durationMs": 28067,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "PASS",
+          "durationMs": 27804,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "PASS",
+          "durationMs": 28793,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "PASS",
+          "durationMs": 30175,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        }
+      ]
+    },
+    {
+      "platform": "ios",
+      "mode": "healthy",
+      "round": 5,
+      "baselineFaults": [
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy"
+      ],
+      "baselineVerified": true,
+      "verdict": "PASS",
+      "durationMs": 134575,
+      "phasesMs": {
+        "planning": 1,
+        "setup": 19352,
+        "observation": 2879,
+        "model": 8119,
+        "action": 98978,
+        "check": 1069,
+        "artifact": 4123,
+        "cleanup": 52
+      },
+      "model": {
+        "requests": 25,
+        "plannerRequests": 0,
+        "jevRequests": 25,
+        "cost": 0.0014237999999999998,
+        "models": [
+          "typesafe/jev-1.13-20260917"
+        ]
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "PASS",
+          "durationMs": 21518,
+          "passedChecks": 1,
+          "totalChecks": 1,
+          "failedChecks": []
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "PASS",
+          "durationMs": 27377,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "PASS",
+          "durationMs": 27430,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "PASS",
+          "durationMs": 27638,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "PASS",
+          "durationMs": 30609,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        }
+      ]
+    },
+    {
+      "platform": "ios",
+      "mode": "healthy",
+      "round": 6,
+      "baselineFaults": [
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy"
+      ],
+      "baselineVerified": true,
+      "verdict": "PASS",
+      "durationMs": 132936,
+      "phasesMs": {
+        "planning": 1,
+        "setup": 18807,
+        "observation": 2894,
+        "model": 8001,
+        "action": 98422,
+        "check": 1085,
+        "artifact": 3674,
+        "cleanup": 50
+      },
+      "model": {
+        "requests": 25,
+        "plannerRequests": 0,
+        "jevRequests": 25,
+        "cost": 0.0014237999999999998,
+        "models": [
+          "typesafe/jev-1.13-20260917"
+        ]
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "PASS",
+          "durationMs": 21361,
+          "passedChecks": 1,
+          "totalChecks": 1,
+          "failedChecks": []
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "PASS",
+          "durationMs": 26871,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "PASS",
+          "durationMs": 27443,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "PASS",
+          "durationMs": 27546,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "PASS",
+          "durationMs": 29713,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        }
+      ]
+    },
+    {
+      "platform": "ios",
+      "mode": "healthy",
+      "round": 7,
+      "baselineFaults": [
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy"
+      ],
+      "baselineVerified": true,
+      "verdict": "PASS",
+      "durationMs": 132088,
+      "phasesMs": {
+        "planning": 1,
+        "setup": 17747,
+        "observation": 2937,
+        "model": 7909,
+        "action": 98761,
+        "check": 1078,
+        "artifact": 3611,
+        "cleanup": 42
+      },
+      "model": {
+        "requests": 25,
+        "plannerRequests": 0,
+        "jevRequests": 25,
+        "cost": 0.0014237999999999998,
+        "models": [
+          "typesafe/jev-1.13-20260917"
+        ]
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "PASS",
+          "durationMs": 21332,
+          "passedChecks": 1,
+          "totalChecks": 1,
+          "failedChecks": []
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "PASS",
+          "durationMs": 26859,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "PASS",
+          "durationMs": 27214,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "PASS",
+          "durationMs": 27024,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "PASS",
+          "durationMs": 29655,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        }
+      ]
+    },
+    {
+      "platform": "ios",
+      "mode": "healthy",
+      "round": 8,
+      "baselineFaults": [
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy"
+      ],
+      "baselineVerified": true,
+      "verdict": "PASS",
+      "durationMs": 134191,
+      "phasesMs": {
+        "planning": 1,
+        "setup": 17808,
+        "observation": 2934,
+        "model": 8343,
+        "action": 99144,
+        "check": 1089,
+        "artifact": 4827,
+        "cleanup": 40
+      },
+      "model": {
+        "requests": 25,
+        "plannerRequests": 0,
+        "jevRequests": 25,
+        "cost": 0.0014237999999999998,
+        "models": [
+          "typesafe/jev-1.13-20260917"
+        ]
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "PASS",
+          "durationMs": 21270,
+          "passedChecks": 1,
+          "totalChecks": 1,
+          "failedChecks": []
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "PASS",
+          "durationMs": 26928,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "PASS",
+          "durationMs": 27641,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "PASS",
+          "durationMs": 27067,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "PASS",
+          "durationMs": 31282,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        }
+      ]
+    },
+    {
+      "platform": "ios",
+      "mode": "healthy",
+      "round": 9,
+      "baselineFaults": [
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy"
+      ],
+      "baselineVerified": true,
+      "verdict": "PASS",
+      "durationMs": 132375,
+      "phasesMs": {
+        "planning": 1,
+        "setup": 17654,
+        "observation": 2934,
+        "model": 7476,
+        "action": 98786,
+        "check": 1079,
+        "artifact": 4386,
+        "cleanup": 54
+      },
+      "model": {
+        "requests": 25,
+        "plannerRequests": 0,
+        "jevRequests": 25,
+        "cost": 0.0014237999999999998,
+        "models": [
+          "typesafe/jev-1.13-20260917"
+        ]
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "PASS",
+          "durationMs": 21134,
+          "passedChecks": 1,
+          "totalChecks": 1,
+          "failedChecks": []
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "PASS",
+          "durationMs": 26735,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "PASS",
+          "durationMs": 26979,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "PASS",
+          "durationMs": 28043,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "PASS",
+          "durationMs": 29479,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        }
+      ]
+    },
+    {
+      "platform": "ios",
+      "mode": "healthy",
+      "round": 10,
+      "baselineFaults": [
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy"
+      ],
+      "baselineVerified": true,
+      "verdict": "PASS",
+      "durationMs": 132287,
+      "phasesMs": {
+        "planning": 1,
+        "setup": 17731,
+        "observation": 2942,
+        "model": 7762,
+        "action": 98998,
+        "check": 1098,
+        "artifact": 3704,
+        "cleanup": 49
+      },
+      "model": {
+        "requests": 25,
+        "plannerRequests": 0,
+        "jevRequests": 25,
+        "cost": 0.0014237999999999998,
+        "models": [
+          "typesafe/jev-1.13-20260917"
+        ]
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "PASS",
+          "durationMs": 21305,
+          "passedChecks": 1,
+          "totalChecks": 1,
+          "failedChecks": []
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "PASS",
+          "durationMs": 26973,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "PASS",
+          "durationMs": 27084,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "PASS",
+          "durationMs": 27198,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "PASS",
+          "durationMs": 29724,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        }
+      ]
+    },
+    {
+      "platform": "ios",
+      "mode": "broken",
+      "round": 1,
+      "baselineFaults": [
+        "invalid-login",
+        "wrong-filter",
+        "wrong-total",
+        "ineffective-removal",
+        "lost-persistence"
+      ],
+      "baselineVerified": true,
+      "correctFaults": [
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "verdict": "FAIL",
+      "durationMs": 142294,
+      "phasesMs": {
+        "planning": 1,
+        "setup": 17704,
+        "observation": 2948,
+        "model": 8113,
+        "action": 98835,
+        "check": 10761,
+        "artifact": 3889,
+        "cleanup": 42
+      },
+      "model": {
+        "requests": 25,
+        "plannerRequests": 0,
+        "jevRequests": 25,
+        "cost": 0.0014237999999999998,
+        "models": [
+          "typesafe/jev-1.13-20260917"
+        ]
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "FAIL",
+          "durationMs": 23233,
+          "passedChecks": 0,
+          "totalChecks": 1,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "FAIL",
+          "durationMs": 28866,
+          "passedChecks": 2,
+          "totalChecks": 3,
+          "failedChecks": [
+            {
+              "kind": "absent",
+              "expected": false,
+              "observed": true
+            }
+          ]
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "FAIL",
+          "durationMs": 29337,
+          "passedChecks": 2,
+          "totalChecks": 3,
+          "failedChecks": [
+            {
+              "kind": "number",
+              "expected": 72,
+              "observed": 77
+            }
+          ]
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "FAIL",
+          "durationMs": 29405,
+          "passedChecks": 1,
+          "totalChecks": 2,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "FAIL",
+          "durationMs": 31450,
+          "passedChecks": 1,
+          "totalChecks": 2,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "platform": "ios",
+      "mode": "broken",
+      "round": 2,
+      "baselineFaults": [
+        "invalid-login",
+        "wrong-filter",
+        "wrong-total",
+        "ineffective-removal",
+        "lost-persistence"
+      ],
+      "baselineVerified": true,
+      "correctFaults": [
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "verdict": "FAIL",
+      "durationMs": 142417,
+      "phasesMs": {
+        "planning": 2,
+        "setup": 17608,
+        "observation": 3018,
+        "model": 7886,
+        "action": 99131,
+        "check": 10893,
+        "artifact": 3830,
+        "cleanup": 48
+      },
+      "model": {
+        "requests": 25,
+        "plannerRequests": 0,
+        "jevRequests": 25,
+        "cost": 0.0014237999999999998,
+        "models": [
+          "typesafe/jev-1.13-20260917"
+        ]
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "FAIL",
+          "durationMs": 23045,
+          "passedChecks": 0,
+          "totalChecks": 1,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "FAIL",
+          "durationMs": 29085,
+          "passedChecks": 2,
+          "totalChecks": 3,
+          "failedChecks": [
+            {
+              "kind": "absent",
+              "expected": false,
+              "observed": true
+            }
+          ]
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "FAIL",
+          "durationMs": 29435,
+          "passedChecks": 2,
+          "totalChecks": 3,
+          "failedChecks": [
+            {
+              "kind": "number",
+              "expected": 72,
+              "observed": 77
+            }
+          ]
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "FAIL",
+          "durationMs": 29257,
+          "passedChecks": 1,
+          "totalChecks": 2,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "FAIL",
+          "durationMs": 31591,
+          "passedChecks": 1,
+          "totalChecks": 2,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "platform": "ios",
+      "mode": "broken",
+      "round": 3,
+      "baselineFaults": [
+        "invalid-login",
+        "wrong-filter",
+        "wrong-total",
+        "ineffective-removal",
+        "lost-persistence"
+      ],
+      "baselineVerified": true,
+      "correctFaults": [
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "verdict": "FAIL",
+      "durationMs": 142234,
+      "phasesMs": {
+        "planning": 1,
+        "setup": 17642,
+        "observation": 2913,
+        "model": 7569,
+        "action": 99310,
+        "check": 10953,
+        "artifact": 3788,
+        "cleanup": 55
+      },
+      "model": {
+        "requests": 25,
+        "plannerRequests": 0,
+        "jevRequests": 25,
+        "cost": 0.0014237999999999998,
+        "models": [
+          "typesafe/jev-1.13-20260917"
+        ]
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "FAIL",
+          "durationMs": 23179,
+          "passedChecks": 0,
+          "totalChecks": 1,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "FAIL",
+          "durationMs": 29166,
+          "passedChecks": 2,
+          "totalChecks": 3,
+          "failedChecks": [
+            {
+              "kind": "absent",
+              "expected": false,
+              "observed": true
+            }
+          ]
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "FAIL",
+          "durationMs": 29131,
+          "passedChecks": 2,
+          "totalChecks": 3,
+          "failedChecks": [
+            {
+              "kind": "number",
+              "expected": 72,
+              "observed": 77
+            }
+          ]
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "FAIL",
+          "durationMs": 29164,
+          "passedChecks": 1,
+          "totalChecks": 2,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "FAIL",
+          "durationMs": 31591,
+          "passedChecks": 1,
+          "totalChecks": 2,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "platform": "ios",
+      "mode": "broken",
+      "round": 4,
+      "baselineFaults": [
+        "invalid-login",
+        "wrong-filter",
+        "wrong-total",
+        "ineffective-removal",
+        "lost-persistence"
+      ],
+      "baselineVerified": true,
+      "correctFaults": [
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "verdict": "FAIL",
+      "durationMs": 142395,
+      "phasesMs": {
+        "planning": 0,
+        "setup": 17668,
+        "observation": 2919,
+        "model": 7756,
+        "action": 99213,
+        "check": 11042,
+        "artifact": 3738,
+        "cleanup": 55
+      },
+      "model": {
+        "requests": 25,
+        "plannerRequests": 0,
+        "jevRequests": 25,
+        "cost": 0.0014237999999999998,
+        "models": [
+          "typesafe/jev-1.13-20260917"
+        ]
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "FAIL",
+          "durationMs": 23349,
+          "passedChecks": 0,
+          "totalChecks": 1,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "FAIL",
+          "durationMs": 29180,
+          "passedChecks": 2,
+          "totalChecks": 3,
+          "failedChecks": [
+            {
+              "kind": "absent",
+              "expected": false,
+              "observed": true
+            }
+          ]
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "FAIL",
+          "durationMs": 29256,
+          "passedChecks": 2,
+          "totalChecks": 3,
+          "failedChecks": [
+            {
+              "kind": "number",
+              "expected": 72,
+              "observed": 77
+            }
+          ]
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "FAIL",
+          "durationMs": 28942,
+          "passedChecks": 1,
+          "totalChecks": 2,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "FAIL",
+          "durationMs": 31665,
+          "passedChecks": 1,
+          "totalChecks": 2,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "platform": "ios",
+      "mode": "broken",
+      "round": 5,
+      "baselineFaults": [
+        "invalid-login",
+        "wrong-filter",
+        "wrong-total",
+        "ineffective-removal",
+        "lost-persistence"
+      ],
+      "baselineVerified": true,
+      "correctFaults": [
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "verdict": "FAIL",
+      "durationMs": 141559,
+      "phasesMs": {
+        "planning": 1,
+        "setup": 17661,
+        "observation": 2926,
+        "model": 7378,
+        "action": 99117,
+        "check": 10765,
+        "artifact": 3657,
+        "cleanup": 51
+      },
+      "model": {
+        "requests": 25,
+        "plannerRequests": 0,
+        "jevRequests": 25,
+        "cost": 0.0014237999999999998,
+        "models": [
+          "typesafe/jev-1.13-20260917"
+        ]
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "FAIL",
+          "durationMs": 23219,
+          "passedChecks": 0,
+          "totalChecks": 1,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "FAIL",
+          "durationMs": 29100,
+          "passedChecks": 2,
+          "totalChecks": 3,
+          "failedChecks": [
+            {
+              "kind": "absent",
+              "expected": false,
+              "observed": true
+            }
+          ]
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "FAIL",
+          "durationMs": 28912,
+          "passedChecks": 2,
+          "totalChecks": 3,
+          "failedChecks": [
+            {
+              "kind": "number",
+              "expected": 72,
+              "observed": 77
+            }
+          ]
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "FAIL",
+          "durationMs": 28867,
+          "passedChecks": 1,
+          "totalChecks": 2,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "FAIL",
+          "durationMs": 31459,
+          "passedChecks": 1,
+          "totalChecks": 2,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "platform": "ios",
+      "mode": "broken",
+      "round": 6,
+      "baselineFaults": [
+        "invalid-login",
+        "wrong-filter",
+        "wrong-total",
+        "ineffective-removal",
+        "lost-persistence"
+      ],
+      "baselineVerified": true,
+      "correctFaults": [
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "verdict": "FAIL",
+      "durationMs": 142909,
+      "phasesMs": {
+        "planning": 1,
+        "setup": 17753,
+        "observation": 2955,
+        "model": 8189,
+        "action": 99391,
+        "check": 10763,
+        "artifact": 3805,
+        "cleanup": 50
+      },
+      "model": {
+        "requests": 25,
+        "plannerRequests": 0,
+        "jevRequests": 25,
+        "cost": 0.0014237999999999998,
+        "models": [
+          "typesafe/jev-1.13-20260917"
+        ]
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "FAIL",
+          "durationMs": 23289,
+          "passedChecks": 0,
+          "totalChecks": 1,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "FAIL",
+          "durationMs": 29409,
+          "passedChecks": 2,
+          "totalChecks": 3,
+          "failedChecks": [
+            {
+              "kind": "absent",
+              "expected": false,
+              "observed": true
+            }
+          ]
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "FAIL",
+          "durationMs": 29458,
+          "passedChecks": 2,
+          "totalChecks": 3,
+          "failedChecks": [
+            {
+              "kind": "number",
+              "expected": 72,
+              "observed": 77
+            }
+          ]
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "FAIL",
+          "durationMs": 29095,
+          "passedChecks": 1,
+          "totalChecks": 2,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "FAIL",
+          "durationMs": 31655,
+          "passedChecks": 1,
+          "totalChecks": 2,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "platform": "ios",
+      "mode": "broken",
+      "round": 7,
+      "baselineFaults": [
+        "invalid-login",
+        "wrong-filter",
+        "wrong-total",
+        "ineffective-removal",
+        "lost-persistence"
+      ],
+      "baselineVerified": true,
+      "correctFaults": [
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "verdict": "FAIL",
+      "durationMs": 142461,
+      "phasesMs": {
+        "planning": 1,
+        "setup": 17755,
+        "observation": 2938,
+        "model": 7942,
+        "action": 99143,
+        "check": 10836,
+        "artifact": 3795,
+        "cleanup": 49
+      },
+      "model": {
+        "requests": 25,
+        "plannerRequests": 0,
+        "jevRequests": 25,
+        "cost": 0.0014237999999999998,
+        "models": [
+          "typesafe/jev-1.13-20260917"
+        ]
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "FAIL",
+          "durationMs": 23122,
+          "passedChecks": 0,
+          "totalChecks": 1,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "FAIL",
+          "durationMs": 29204,
+          "passedChecks": 2,
+          "totalChecks": 3,
+          "failedChecks": [
+            {
+              "kind": "absent",
+              "expected": false,
+              "observed": true
+            }
+          ]
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "FAIL",
+          "durationMs": 29291,
+          "passedChecks": 2,
+          "totalChecks": 3,
+          "failedChecks": [
+            {
+              "kind": "number",
+              "expected": 72,
+              "observed": 77
+            }
+          ]
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "FAIL",
+          "durationMs": 29210,
+          "passedChecks": 1,
+          "totalChecks": 2,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "FAIL",
+          "durationMs": 31631,
+          "passedChecks": 1,
+          "totalChecks": 2,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "platform": "ios",
+      "mode": "broken",
+      "round": 8,
+      "baselineFaults": [
+        "invalid-login",
+        "wrong-filter",
+        "wrong-total",
+        "ineffective-removal",
+        "lost-persistence"
+      ],
+      "baselineVerified": true,
+      "correctFaults": [
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "verdict": "FAIL",
+      "durationMs": 142358,
+      "phasesMs": {
+        "planning": 1,
+        "setup": 17606,
+        "observation": 2902,
+        "model": 7972,
+        "action": 99058,
+        "check": 10975,
+        "artifact": 3795,
+        "cleanup": 48
+      },
+      "model": {
+        "requests": 25,
+        "plannerRequests": 0,
+        "jevRequests": 25,
+        "cost": 0.0014237999999999998,
+        "models": [
+          "typesafe/jev-1.13-20260917"
+        ]
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "FAIL",
+          "durationMs": 23139,
+          "passedChecks": 0,
+          "totalChecks": 1,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "FAIL",
+          "durationMs": 29010,
+          "passedChecks": 2,
+          "totalChecks": 3,
+          "failedChecks": [
+            {
+              "kind": "absent",
+              "expected": false,
+              "observed": true
+            }
+          ]
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "FAIL",
+          "durationMs": 29426,
+          "passedChecks": 2,
+          "totalChecks": 3,
+          "failedChecks": [
+            {
+              "kind": "number",
+              "expected": 72,
+              "observed": 77
+            }
+          ]
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "FAIL",
+          "durationMs": 29000,
+          "passedChecks": 1,
+          "totalChecks": 2,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "FAIL",
+          "durationMs": 31780,
+          "passedChecks": 1,
+          "totalChecks": 2,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "platform": "ios",
+      "mode": "broken",
+      "round": 9,
+      "baselineFaults": [
+        "invalid-login",
+        "wrong-filter",
+        "wrong-total",
+        "ineffective-removal",
+        "lost-persistence"
+      ],
+      "baselineVerified": true,
+      "correctFaults": [
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "verdict": "FAIL",
+      "durationMs": 141788,
+      "phasesMs": {
+        "planning": 1,
+        "setup": 17687,
+        "observation": 2937,
+        "model": 7655,
+        "action": 98896,
+        "check": 10838,
+        "artifact": 3715,
+        "cleanup": 54
+      },
+      "model": {
+        "requests": 25,
+        "plannerRequests": 0,
+        "jevRequests": 25,
+        "cost": 0.0014237999999999998,
+        "models": [
+          "typesafe/jev-1.13-20260917"
+        ]
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "FAIL",
+          "durationMs": 23287,
+          "passedChecks": 0,
+          "totalChecks": 1,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "FAIL",
+          "durationMs": 28953,
+          "passedChecks": 2,
+          "totalChecks": 3,
+          "failedChecks": [
+            {
+              "kind": "absent",
+              "expected": false,
+              "observed": true
+            }
+          ]
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "FAIL",
+          "durationMs": 29280,
+          "passedChecks": 2,
+          "totalChecks": 3,
+          "failedChecks": [
+            {
+              "kind": "number",
+              "expected": 72,
+              "observed": 77
+            }
+          ]
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "FAIL",
+          "durationMs": 28908,
+          "passedChecks": 1,
+          "totalChecks": 2,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "FAIL",
+          "durationMs": 31357,
+          "passedChecks": 1,
+          "totalChecks": 2,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "platform": "ios",
+      "mode": "broken",
+      "round": 10,
+      "baselineFaults": [
+        "invalid-login",
+        "wrong-filter",
+        "wrong-total",
+        "ineffective-removal",
+        "lost-persistence"
+      ],
+      "baselineVerified": true,
+      "correctFaults": [
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "verdict": "FAIL",
+      "durationMs": 141671,
+      "phasesMs": {
+        "planning": 1,
+        "setup": 17560,
+        "observation": 2876,
+        "model": 7460,
+        "action": 99197,
+        "check": 10861,
+        "artifact": 3660,
+        "cleanup": 51
+      },
+      "model": {
+        "requests": 25,
+        "plannerRequests": 0,
+        "jevRequests": 25,
+        "cost": 0.0014237999999999998,
+        "models": [
+          "typesafe/jev-1.13-20260917"
+        ]
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "FAIL",
+          "durationMs": 23024,
+          "passedChecks": 0,
+          "totalChecks": 1,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "FAIL",
+          "durationMs": 29181,
+          "passedChecks": 2,
+          "totalChecks": 3,
+          "failedChecks": [
+            {
+              "kind": "absent",
+              "expected": false,
+              "observed": true
+            }
+          ]
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "FAIL",
+          "durationMs": 29038,
+          "passedChecks": 2,
+          "totalChecks": 3,
+          "failedChecks": [
+            {
+              "kind": "number",
+              "expected": 72,
+              "observed": 77
+            }
+          ]
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "FAIL",
+          "durationMs": 29206,
+          "passedChecks": 1,
+          "totalChecks": 2,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "FAIL",
+          "durationMs": 31218,
+          "passedChecks": 1,
+          "totalChecks": 2,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "platform": "ios",
+      "mode": "replay",
+      "round": 1,
+      "baselineFaults": [
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy"
+      ],
+      "baselineVerified": true,
+      "verdict": "PASS",
+      "durationMs": 134599,
+      "phasesMs": {
+        "planning": 0,
+        "setup": 17676,
+        "observation": 6783,
+        "model": 1178,
+        "action": 98324,
+        "check": 1165,
+        "artifact": 3757,
+        "cleanup": 54
+      },
+      "model": {
+        "requests": 3,
+        "plannerRequests": 0,
+        "jevRequests": 3,
+        "cost": 0.000167748,
+        "models": [
+          "typesafe/jev-1.13-20260917"
+        ]
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "PASS",
+          "durationMs": 20092,
+          "passedChecks": 1,
+          "totalChecks": 1,
+          "failedChecks": []
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "PASS",
+          "durationMs": 36452,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "PASS",
+          "durationMs": 25262,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "PASS",
+          "durationMs": 25091,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "PASS",
+          "durationMs": 27699,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        }
+      ]
+    },
+    {
+      "platform": "ios",
+      "mode": "replay",
+      "round": 2,
+      "baselineFaults": [
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy"
+      ],
+      "baselineVerified": true,
+      "verdict": "PASS",
+      "durationMs": 133922,
+      "phasesMs": {
+        "planning": 0,
+        "setup": 17641,
+        "observation": 6526,
+        "model": 1040,
+        "action": 98288,
+        "check": 1174,
+        "artifact": 3547,
+        "cleanup": 46
+      },
+      "model": {
+        "requests": 3,
+        "plannerRequests": 0,
+        "jevRequests": 3,
+        "cost": 0.000167748,
+        "models": [
+          "typesafe/jev-1.13-20260917"
+        ]
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "PASS",
+          "durationMs": 20111,
+          "passedChecks": 1,
+          "totalChecks": 1,
+          "failedChecks": []
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "PASS",
+          "durationMs": 36178,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "PASS",
+          "durationMs": 25014,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "PASS",
+          "durationMs": 25023,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "PASS",
+          "durationMs": 27593,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        }
+      ]
+    },
+    {
+      "platform": "ios",
+      "mode": "replay",
+      "round": 3,
+      "baselineFaults": [
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy"
+      ],
+      "baselineVerified": true,
+      "verdict": "PASS",
+      "durationMs": 134511,
+      "phasesMs": {
+        "planning": 0,
+        "setup": 17575,
+        "observation": 6861,
+        "model": 1204,
+        "action": 98453,
+        "check": 1163,
+        "artifact": 3544,
+        "cleanup": 46
+      },
+      "model": {
+        "requests": 3,
+        "plannerRequests": 0,
+        "jevRequests": 3,
+        "cost": 0.000167748,
+        "models": [
+          "typesafe/jev-1.13-20260917"
+        ]
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "PASS",
+          "durationMs": 20048,
+          "passedChecks": 1,
+          "totalChecks": 1,
+          "failedChecks": []
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "PASS",
+          "durationMs": 36516,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "PASS",
+          "durationMs": 25112,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "PASS",
+          "durationMs": 25229,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "PASS",
+          "durationMs": 27604,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        }
+      ]
+    },
+    {
+      "platform": "ios",
+      "mode": "replay",
+      "round": 4,
+      "baselineFaults": [
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy"
+      ],
+      "baselineVerified": true,
+      "verdict": "PASS",
+      "durationMs": 135215,
+      "phasesMs": {
+        "planning": 0,
+        "setup": 17765,
+        "observation": 6897,
+        "model": 1190,
+        "action": 98608,
+        "check": 1126,
+        "artifact": 3918,
+        "cleanup": 51
+      },
+      "model": {
+        "requests": 3,
+        "plannerRequests": 0,
+        "jevRequests": 3,
+        "cost": 0.000167748,
+        "models": [
+          "typesafe/jev-1.13-20260917"
+        ]
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "PASS",
+          "durationMs": 20131,
+          "passedChecks": 1,
+          "totalChecks": 1,
+          "failedChecks": []
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "PASS",
+          "durationMs": 36579,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "PASS",
+          "durationMs": 25360,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "PASS",
+          "durationMs": 25319,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "PASS",
+          "durationMs": 27823,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        }
+      ]
+    },
+    {
+      "platform": "ios",
+      "mode": "replay",
+      "round": 5,
+      "baselineFaults": [
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy"
+      ],
+      "baselineVerified": true,
+      "verdict": "PASS",
+      "durationMs": 134756,
+      "phasesMs": {
+        "planning": 0,
+        "setup": 17879,
+        "observation": 6951,
+        "model": 1079,
+        "action": 98269,
+        "check": 1159,
+        "artifact": 3693,
+        "cleanup": 50
+      },
+      "model": {
+        "requests": 3,
+        "plannerRequests": 0,
+        "jevRequests": 3,
+        "cost": 0.000167748,
+        "models": [
+          "typesafe/jev-1.13-20260917"
+        ]
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "PASS",
+          "durationMs": 20439,
+          "passedChecks": 1,
+          "totalChecks": 1,
+          "failedChecks": []
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "PASS",
+          "durationMs": 36360,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "PASS",
+          "durationMs": 25212,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "PASS",
+          "durationMs": 25112,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "PASS",
+          "durationMs": 27630,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        }
+      ]
+    },
+    {
+      "platform": "ios",
+      "mode": "replay",
+      "round": 6,
+      "baselineFaults": [
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy"
+      ],
+      "baselineVerified": true,
+      "verdict": "PASS",
+      "durationMs": 134471,
+      "phasesMs": {
+        "planning": 0,
+        "setup": 17709,
+        "observation": 6841,
+        "model": 1309,
+        "action": 98174,
+        "check": 1166,
+        "artifact": 3559,
+        "cleanup": 52
+      },
+      "model": {
+        "requests": 3,
+        "plannerRequests": 0,
+        "jevRequests": 3,
+        "cost": 0.000167748,
+        "models": [
+          "typesafe/jev-1.13-20260917"
+        ]
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "PASS",
+          "durationMs": 20091,
+          "passedChecks": 1,
+          "totalChecks": 1,
+          "failedChecks": []
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "PASS",
+          "durationMs": 36603,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "PASS",
+          "durationMs": 25158,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "PASS",
+          "durationMs": 25021,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "PASS",
+          "durationMs": 27597,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        }
+      ]
+    },
+    {
+      "platform": "ios",
+      "mode": "replay",
+      "round": 7,
+      "baselineFaults": [
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy"
+      ],
+      "baselineVerified": true,
+      "verdict": "PASS",
+      "durationMs": 134829,
+      "phasesMs": {
+        "planning": 0,
+        "setup": 17589,
+        "observation": 6908,
+        "model": 1113,
+        "action": 98472,
+        "check": 1174,
+        "artifact": 3666,
+        "cleanup": 46
+      },
+      "model": {
+        "requests": 3,
+        "plannerRequests": 0,
+        "jevRequests": 3,
+        "cost": 0.000167748,
+        "models": [
+          "typesafe/jev-1.13-20260917"
+        ]
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "PASS",
+          "durationMs": 20291,
+          "passedChecks": 1,
+          "totalChecks": 1,
+          "failedChecks": []
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "PASS",
+          "durationMs": 36563,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "PASS",
+          "durationMs": 25190,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "PASS",
+          "durationMs": 25188,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "PASS",
+          "durationMs": 27595,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        }
+      ]
+    },
+    {
+      "platform": "ios",
+      "mode": "replay",
+      "round": 8,
+      "baselineFaults": [
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy"
+      ],
+      "baselineVerified": true,
+      "verdict": "PASS",
+      "durationMs": 134732,
+      "phasesMs": {
+        "planning": 1,
+        "setup": 17666,
+        "observation": 6790,
+        "model": 1181,
+        "action": 98360,
+        "check": 1163,
+        "artifact": 3855,
+        "cleanup": 50
+      },
+      "model": {
+        "requests": 3,
+        "plannerRequests": 0,
+        "jevRequests": 3,
+        "cost": 0.000167748,
+        "models": [
+          "typesafe/jev-1.13-20260917"
+        ]
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "PASS",
+          "durationMs": 20038,
+          "passedChecks": 1,
+          "totalChecks": 1,
+          "failedChecks": []
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "PASS",
+          "durationMs": 36574,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "PASS",
+          "durationMs": 25334,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "PASS",
+          "durationMs": 25120,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "PASS",
+          "durationMs": 27663,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        }
+      ]
+    },
+    {
+      "platform": "ios",
+      "mode": "replay",
+      "round": 9,
+      "baselineFaults": [
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy"
+      ],
+      "baselineVerified": true,
+      "verdict": "PASS",
+      "durationMs": 134228,
+      "phasesMs": {
+        "planning": 0,
+        "setup": 17594,
+        "observation": 6942,
+        "model": 1143,
+        "action": 98203,
+        "check": 1148,
+        "artifact": 3488,
+        "cleanup": 51
+      },
+      "model": {
+        "requests": 3,
+        "plannerRequests": 0,
+        "jevRequests": 3,
+        "cost": 0.000167748,
+        "models": [
+          "typesafe/jev-1.13-20260917"
+        ]
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "PASS",
+          "durationMs": 20045,
+          "passedChecks": 1,
+          "totalChecks": 1,
+          "failedChecks": []
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "PASS",
+          "durationMs": 36564,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "PASS",
+          "durationMs": 25112,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "PASS",
+          "durationMs": 25002,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "PASS",
+          "durationMs": 27502,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        }
+      ]
+    },
+    {
+      "platform": "ios",
+      "mode": "replay",
+      "round": 10,
+      "baselineFaults": [
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy"
+      ],
+      "baselineVerified": true,
+      "verdict": "PASS",
+      "durationMs": 134674,
+      "phasesMs": {
+        "planning": 1,
+        "setup": 17680,
+        "observation": 6835,
+        "model": 1200,
+        "action": 98346,
+        "check": 1174,
+        "artifact": 3712,
+        "cleanup": 56
+      },
+      "model": {
+        "requests": 3,
+        "plannerRequests": 0,
+        "jevRequests": 3,
+        "cost": 0.000167748,
+        "models": [
+          "typesafe/jev-1.13-20260917"
+        ]
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "PASS",
+          "durationMs": 20113,
+          "passedChecks": 1,
+          "totalChecks": 1,
+          "failedChecks": []
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "PASS",
+          "durationMs": 36448,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "PASS",
+          "durationMs": 25242,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "PASS",
+          "durationMs": 25242,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "PASS",
+          "durationMs": 27626,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        }
+      ]
+    },
+    {
+      "platform": "android",
+      "mode": "healthy",
+      "round": 1,
+      "baselineFaults": [
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy"
+      ],
+      "baselineVerified": true,
+      "verdict": "PASS",
+      "durationMs": 54353,
+      "phasesMs": {
+        "planning": 17,
+        "setup": 10873,
+        "observation": 3132,
+        "model": 7552,
+        "action": 21911,
+        "check": 4761,
+        "artifact": 4653,
+        "cleanup": 1248
+      },
+      "model": {
+        "requests": 26,
+        "plannerRequests": 0,
+        "jevRequests": 26,
+        "cost": 0.001281168,
+        "models": [
+          "typesafe/jev-1.13-20260917"
+        ]
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "PASS",
+          "durationMs": 8860,
+          "passedChecks": 1,
+          "totalChecks": 1,
+          "failedChecks": []
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "PASS",
+          "durationMs": 10403,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "PASS",
+          "durationMs": 12121,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "PASS",
+          "durationMs": 10396,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "PASS",
+          "durationMs": 12552,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        }
+      ]
+    },
+    {
+      "platform": "android",
+      "mode": "healthy",
+      "round": 2,
+      "baselineFaults": [
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy"
+      ],
+      "baselineVerified": true,
+      "verdict": "PASS",
+      "durationMs": 53595,
+      "phasesMs": {
+        "planning": 2,
+        "setup": 10491,
+        "observation": 2712,
+        "model": 7335,
+        "action": 22288,
+        "check": 4716,
+        "artifact": 4626,
+        "cleanup": 1221
+      },
+      "model": {
+        "requests": 26,
+        "plannerRequests": 0,
+        "jevRequests": 26,
+        "cost": 0.001281168,
+        "models": [
+          "typesafe/jev-1.13-20260917"
+        ]
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "PASS",
+          "durationMs": 7976,
+          "passedChecks": 1,
+          "totalChecks": 1,
+          "failedChecks": []
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "PASS",
+          "durationMs": 9973,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "PASS",
+          "durationMs": 11902,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "PASS",
+          "durationMs": 10438,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "PASS",
+          "durationMs": 13302,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        }
+      ]
+    },
+    {
+      "platform": "android",
+      "mode": "healthy",
+      "round": 3,
+      "baselineFaults": [
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy"
+      ],
+      "baselineVerified": true,
+      "verdict": "PASS",
+      "durationMs": 53310,
+      "phasesMs": {
+        "planning": 1,
+        "setup": 10535,
+        "observation": 2755,
+        "model": 6638,
+        "action": 22582,
+        "check": 4705,
+        "artifact": 4650,
+        "cleanup": 1238
+      },
+      "model": {
+        "requests": 26,
+        "plannerRequests": 0,
+        "jevRequests": 26,
+        "cost": 0.001281168,
+        "models": [
+          "typesafe/jev-1.13-20260917"
+        ]
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "PASS",
+          "durationMs": 7758,
+          "passedChecks": 1,
+          "totalChecks": 1,
+          "failedChecks": []
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "PASS",
+          "durationMs": 10359,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "PASS",
+          "durationMs": 11784,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "PASS",
+          "durationMs": 10607,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "PASS",
+          "durationMs": 12794,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        }
+      ]
+    },
+    {
+      "platform": "android",
+      "mode": "healthy",
+      "round": 4,
+      "baselineFaults": [
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy"
+      ],
+      "baselineVerified": true,
+      "verdict": "PASS",
+      "durationMs": 53404,
+      "phasesMs": {
+        "planning": 2,
+        "setup": 10481,
+        "observation": 2783,
+        "model": 7441,
+        "action": 22222,
+        "check": 4683,
+        "artifact": 4619,
+        "cleanup": 1173
+      },
+      "model": {
+        "requests": 25,
+        "plannerRequests": 0,
+        "jevRequests": 25,
+        "cost": 0.001257984,
+        "models": [
+          "typesafe/jev-1.13-20260917"
+        ]
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "PASS",
+          "durationMs": 7731,
+          "passedChecks": 1,
+          "totalChecks": 1,
+          "failedChecks": []
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "PASS",
+          "durationMs": 10335,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "PASS",
+          "durationMs": 12060,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "PASS",
+          "durationMs": 10373,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "PASS",
+          "durationMs": 12901,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        }
+      ]
+    },
+    {
+      "platform": "android",
+      "mode": "healthy",
+      "round": 5,
+      "baselineFaults": [
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy"
+      ],
+      "baselineVerified": true,
+      "verdict": "PASS",
+      "durationMs": 53796,
+      "phasesMs": {
+        "planning": 1,
+        "setup": 10459,
+        "observation": 2678,
+        "model": 7669,
+        "action": 22276,
+        "check": 4698,
+        "artifact": 4781,
+        "cleanup": 1233
+      },
+      "model": {
+        "requests": 25,
+        "plannerRequests": 0,
+        "jevRequests": 25,
+        "cost": 0.0012584879999999999,
+        "models": [
+          "typesafe/jev-1.13-20260917"
+        ]
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "PASS",
+          "durationMs": 8093,
+          "passedChecks": 1,
+          "totalChecks": 1,
+          "failedChecks": []
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "PASS",
+          "durationMs": 9873,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "PASS",
+          "durationMs": 12383,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "PASS",
+          "durationMs": 10570,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "PASS",
+          "durationMs": 12864,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        }
+      ]
+    },
+    {
+      "platform": "android",
+      "mode": "healthy",
+      "round": 6,
+      "baselineFaults": [
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy"
+      ],
+      "baselineVerified": true,
+      "verdict": "PASS",
+      "durationMs": 53375,
+      "phasesMs": {
+        "planning": 0,
+        "setup": 10494,
+        "observation": 2645,
+        "model": 7094,
+        "action": 22262,
+        "check": 4707,
+        "artifact": 4742,
+        "cleanup": 1226
+      },
+      "model": {
+        "requests": 26,
+        "plannerRequests": 0,
+        "jevRequests": 26,
+        "cost": 0.001281168,
+        "models": [
+          "typesafe/jev-1.13-20260917"
+        ]
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "PASS",
+          "durationMs": 8064,
+          "passedChecks": 1,
+          "totalChecks": 1,
+          "failedChecks": []
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "PASS",
+          "durationMs": 9907,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "PASS",
+          "durationMs": 11608,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "PASS",
+          "durationMs": 10686,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "PASS",
+          "durationMs": 13104,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        }
+      ]
+    },
+    {
+      "platform": "android",
+      "mode": "healthy",
+      "round": 7,
+      "baselineFaults": [
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy"
+      ],
+      "baselineVerified": true,
+      "verdict": "PASS",
+      "durationMs": 52556,
+      "phasesMs": {
+        "planning": 1,
+        "setup": 10523,
+        "observation": 2626,
+        "model": 6773,
+        "action": 21874,
+        "check": 4692,
+        "artifact": 4603,
+        "cleanup": 1261
+      },
+      "model": {
+        "requests": 26,
+        "plannerRequests": 0,
+        "jevRequests": 26,
+        "cost": 0.001281168,
+        "models": [
+          "typesafe/jev-1.13-20260917"
+        ]
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "PASS",
+          "durationMs": 7651,
+          "passedChecks": 1,
+          "totalChecks": 1,
+          "failedChecks": []
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "PASS",
+          "durationMs": 9902,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "PASS",
+          "durationMs": 11598,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "PASS",
+          "durationMs": 10672,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "PASS",
+          "durationMs": 12730,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        }
+      ]
+    },
+    {
+      "platform": "android",
+      "mode": "healthy",
+      "round": 8,
+      "baselineFaults": [
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy"
+      ],
+      "baselineVerified": true,
+      "verdict": "PASS",
+      "durationMs": 53858,
+      "phasesMs": {
+        "planning": 1,
+        "setup": 10634,
+        "observation": 2780,
+        "model": 7310,
+        "action": 22393,
+        "check": 4678,
+        "artifact": 4639,
+        "cleanup": 1221
+      },
+      "model": {
+        "requests": 26,
+        "plannerRequests": 0,
+        "jevRequests": 26,
+        "cost": 0.001281168,
+        "models": [
+          "typesafe/jev-1.13-20260917"
+        ]
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "PASS",
+          "durationMs": 7990,
+          "passedChecks": 1,
+          "totalChecks": 1,
+          "failedChecks": []
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "PASS",
+          "durationMs": 10329,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "PASS",
+          "durationMs": 11655,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "PASS",
+          "durationMs": 10696,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "PASS",
+          "durationMs": 13184,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        }
+      ]
+    },
+    {
+      "platform": "android",
+      "mode": "healthy",
+      "round": 9,
+      "baselineFaults": [
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy"
+      ],
+      "baselineVerified": true,
+      "verdict": "PASS",
+      "durationMs": 52534,
+      "phasesMs": {
+        "planning": 1,
+        "setup": 10181,
+        "observation": 2587,
+        "model": 6971,
+        "action": 21740,
+        "check": 4745,
+        "artifact": 4656,
+        "cleanup": 1246
+      },
+      "model": {
+        "requests": 27,
+        "plannerRequests": 0,
+        "jevRequests": 27,
+        "cost": 0.001304352,
+        "models": [
+          "typesafe/jev-1.13-20260917"
+        ]
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "PASS",
+          "durationMs": 8145,
+          "passedChecks": 1,
+          "totalChecks": 1,
+          "failedChecks": []
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "PASS",
+          "durationMs": 9671,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "PASS",
+          "durationMs": 11521,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "PASS",
+          "durationMs": 10143,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "PASS",
+          "durationMs": 13051,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        }
+      ]
+    },
+    {
+      "platform": "android",
+      "mode": "healthy",
+      "round": 10,
+      "baselineFaults": [
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy"
+      ],
+      "baselineVerified": true,
+      "verdict": "PASS",
+      "durationMs": 52602,
+      "phasesMs": {
+        "planning": 1,
+        "setup": 10434,
+        "observation": 2573,
+        "model": 6918,
+        "action": 21910,
+        "check": 4655,
+        "artifact": 4733,
+        "cleanup": 1174
+      },
+      "model": {
+        "requests": 26,
+        "plannerRequests": 0,
+        "jevRequests": 26,
+        "cost": 0.001281168,
+        "models": [
+          "typesafe/jev-1.13-20260917"
+        ]
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "PASS",
+          "durationMs": 8022,
+          "passedChecks": 1,
+          "totalChecks": 1,
+          "failedChecks": []
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "PASS",
+          "durationMs": 9680,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "PASS",
+          "durationMs": 11680,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "PASS",
+          "durationMs": 10270,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "PASS",
+          "durationMs": 12946,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        }
+      ]
+    },
+    {
+      "platform": "android",
+      "mode": "broken",
+      "round": 1,
+      "baselineFaults": [
+        "invalid-login",
+        "wrong-filter",
+        "wrong-total",
+        "ineffective-removal",
+        "lost-persistence"
+      ],
+      "baselineVerified": true,
+      "correctFaults": [
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "verdict": "FAIL",
+      "durationMs": 62851,
+      "phasesMs": {
+        "planning": 1,
+        "setup": 10243,
+        "observation": 2610,
+        "model": 8376,
+        "action": 21993,
+        "check": 13169,
+        "artifact": 4644,
+        "cleanup": 1206
+      },
+      "model": {
+        "requests": 28,
+        "plannerRequests": 0,
+        "jevRequests": 28,
+        "cost": 0.001327536,
+        "models": [
+          "typesafe/jev-1.13-20260917"
+        ]
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "FAIL",
+          "durationMs": 8519,
+          "passedChecks": 0,
+          "totalChecks": 1,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "FAIL",
+          "durationMs": 11727,
+          "passedChecks": 2,
+          "totalChecks": 3,
+          "failedChecks": [
+            {
+              "kind": "absent",
+              "expected": false,
+              "observed": true
+            }
+          ]
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "FAIL",
+          "durationMs": 14735,
+          "passedChecks": 2,
+          "totalChecks": 3,
+          "failedChecks": [
+            {
+              "kind": "number",
+              "expected": 72,
+              "observed": 77
+            }
+          ]
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "FAIL",
+          "durationMs": 12356,
+          "passedChecks": 1,
+          "totalChecks": 2,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "FAIL",
+          "durationMs": 15512,
+          "passedChecks": 1,
+          "totalChecks": 2,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "platform": "android",
+      "mode": "broken",
+      "round": 2,
+      "baselineFaults": [
+        "invalid-login",
+        "wrong-filter",
+        "wrong-total",
+        "ineffective-removal",
+        "lost-persistence"
+      ],
+      "baselineVerified": true,
+      "correctFaults": [
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "verdict": "FAIL",
+      "durationMs": 61507,
+      "phasesMs": {
+        "planning": 1,
+        "setup": 10332,
+        "observation": 2734,
+        "model": 7558,
+        "action": 21575,
+        "check": 13228,
+        "artifact": 4689,
+        "cleanup": 1187
+      },
+      "model": {
+        "requests": 26,
+        "plannerRequests": 0,
+        "jevRequests": 26,
+        "cost": 0.001281168,
+        "models": [
+          "typesafe/jev-1.13-20260917"
+        ]
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "FAIL",
+          "durationMs": 8576,
+          "passedChecks": 0,
+          "totalChecks": 1,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "FAIL",
+          "durationMs": 12048,
+          "passedChecks": 2,
+          "totalChecks": 3,
+          "failedChecks": [
+            {
+              "kind": "absent",
+              "expected": false,
+              "observed": true
+            }
+          ]
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "FAIL",
+          "durationMs": 13500,
+          "passedChecks": 2,
+          "totalChecks": 3,
+          "failedChecks": [
+            {
+              "kind": "number",
+              "expected": 72,
+              "observed": 77
+            }
+          ]
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "FAIL",
+          "durationMs": 12486,
+          "passedChecks": 1,
+          "totalChecks": 2,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "FAIL",
+          "durationMs": 14891,
+          "passedChecks": 1,
+          "totalChecks": 2,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "platform": "android",
+      "mode": "broken",
+      "round": 3,
+      "baselineFaults": [
+        "invalid-login",
+        "wrong-filter",
+        "wrong-total",
+        "ineffective-removal",
+        "lost-persistence"
+      ],
+      "baselineVerified": true,
+      "correctFaults": [
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "verdict": "FAIL",
+      "durationMs": 62085,
+      "phasesMs": {
+        "planning": 1,
+        "setup": 10450,
+        "observation": 2898,
+        "model": 7294,
+        "action": 21993,
+        "check": 13141,
+        "artifact": 4662,
+        "cleanup": 1240
+      },
+      "model": {
+        "requests": 27,
+        "plannerRequests": 0,
+        "jevRequests": 27,
+        "cost": 0.0013043520000000002,
+        "models": [
+          "typesafe/jev-1.13-20260917"
+        ]
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "FAIL",
+          "durationMs": 8515,
+          "passedChecks": 0,
+          "totalChecks": 1,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "FAIL",
+          "durationMs": 12534,
+          "passedChecks": 2,
+          "totalChecks": 3,
+          "failedChecks": [
+            {
+              "kind": "absent",
+              "expected": false,
+              "observed": true
+            }
+          ]
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "FAIL",
+          "durationMs": 13953,
+          "passedChecks": 2,
+          "totalChecks": 3,
+          "failedChecks": [
+            {
+              "kind": "number",
+              "expected": 72,
+              "observed": 77
+            }
+          ]
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "FAIL",
+          "durationMs": 12246,
+          "passedChecks": 1,
+          "totalChecks": 2,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "FAIL",
+          "durationMs": 14833,
+          "passedChecks": 1,
+          "totalChecks": 2,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "platform": "android",
+      "mode": "broken",
+      "round": 4,
+      "baselineFaults": [
+        "invalid-login",
+        "wrong-filter",
+        "wrong-total",
+        "ineffective-removal",
+        "lost-persistence"
+      ],
+      "baselineVerified": true,
+      "correctFaults": [
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "verdict": "FAIL",
+      "durationMs": 60804,
+      "phasesMs": {
+        "planning": 1,
+        "setup": 10255,
+        "observation": 2691,
+        "model": 7069,
+        "action": 21600,
+        "check": 13206,
+        "artifact": 4569,
+        "cleanup": 1210
+      },
+      "model": {
+        "requests": 26,
+        "plannerRequests": 0,
+        "jevRequests": 26,
+        "cost": 0.001281168,
+        "models": [
+          "typesafe/jev-1.13-20260917"
+        ]
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "FAIL",
+          "durationMs": 8956,
+          "passedChecks": 0,
+          "totalChecks": 1,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "FAIL",
+          "durationMs": 11878,
+          "passedChecks": 2,
+          "totalChecks": 3,
+          "failedChecks": [
+            {
+              "kind": "absent",
+              "expected": false,
+              "observed": true
+            }
+          ]
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "FAIL",
+          "durationMs": 13635,
+          "passedChecks": 2,
+          "totalChecks": 3,
+          "failedChecks": [
+            {
+              "kind": "number",
+              "expected": 72,
+              "observed": 77
+            }
+          ]
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "FAIL",
+          "durationMs": 12086,
+          "passedChecks": 1,
+          "totalChecks": 2,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "FAIL",
+          "durationMs": 14246,
+          "passedChecks": 1,
+          "totalChecks": 2,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "platform": "android",
+      "mode": "broken",
+      "round": 5,
+      "baselineFaults": [
+        "invalid-login",
+        "wrong-filter",
+        "wrong-total",
+        "ineffective-removal",
+        "lost-persistence"
+      ],
+      "baselineVerified": true,
+      "correctFaults": [
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "verdict": "FAIL",
+      "durationMs": 61665,
+      "phasesMs": {
+        "planning": 1,
+        "setup": 10364,
+        "observation": 2839,
+        "model": 7285,
+        "action": 21964,
+        "check": 13266,
+        "artifact": 4586,
+        "cleanup": 1150
+      },
+      "model": {
+        "requests": 26,
+        "plannerRequests": 0,
+        "jevRequests": 26,
+        "cost": 0.001281168,
+        "models": [
+          "typesafe/jev-1.13-20260917"
+        ]
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "FAIL",
+          "durationMs": 8404,
+          "passedChecks": 0,
+          "totalChecks": 1,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "FAIL",
+          "durationMs": 11849,
+          "passedChecks": 2,
+          "totalChecks": 3,
+          "failedChecks": [
+            {
+              "kind": "absent",
+              "expected": false,
+              "observed": true
+            }
+          ]
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "FAIL",
+          "durationMs": 14041,
+          "passedChecks": 2,
+          "totalChecks": 3,
+          "failedChecks": [
+            {
+              "kind": "number",
+              "expected": 72,
+              "observed": 77
+            }
+          ]
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "FAIL",
+          "durationMs": 12561,
+          "passedChecks": 1,
+          "totalChecks": 2,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "FAIL",
+          "durationMs": 14799,
+          "passedChecks": 1,
+          "totalChecks": 2,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "platform": "android",
+      "mode": "broken",
+      "round": 6,
+      "baselineFaults": [
+        "invalid-login",
+        "wrong-filter",
+        "wrong-total",
+        "ineffective-removal",
+        "lost-persistence"
+      ],
+      "baselineVerified": true,
+      "correctFaults": [
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "verdict": "FAIL",
+      "durationMs": 61612,
+      "phasesMs": {
+        "planning": 1,
+        "setup": 10474,
+        "observation": 2845,
+        "model": 7264,
+        "action": 21741,
+        "check": 13238,
+        "artifact": 4653,
+        "cleanup": 1191
+      },
+      "model": {
+        "requests": 26,
+        "plannerRequests": 0,
+        "jevRequests": 26,
+        "cost": 0.001281168,
+        "models": [
+          "typesafe/jev-1.13-20260917"
+        ]
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "FAIL",
+          "durationMs": 8313,
+          "passedChecks": 0,
+          "totalChecks": 1,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "FAIL",
+          "durationMs": 12158,
+          "passedChecks": 2,
+          "totalChecks": 3,
+          "failedChecks": [
+            {
+              "kind": "absent",
+              "expected": false,
+              "observed": true
+            }
+          ]
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "FAIL",
+          "durationMs": 13945,
+          "passedChecks": 2,
+          "totalChecks": 3,
+          "failedChecks": [
+            {
+              "kind": "number",
+              "expected": 72,
+              "observed": 77
+            }
+          ]
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "FAIL",
+          "durationMs": 12396,
+          "passedChecks": 1,
+          "totalChecks": 2,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "FAIL",
+          "durationMs": 14797,
+          "passedChecks": 1,
+          "totalChecks": 2,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "platform": "android",
+      "mode": "broken",
+      "round": 7,
+      "baselineFaults": [
+        "invalid-login",
+        "wrong-filter",
+        "wrong-total",
+        "ineffective-removal",
+        "lost-persistence"
+      ],
+      "baselineVerified": true,
+      "correctFaults": [
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "verdict": "FAIL",
+      "durationMs": 61720,
+      "phasesMs": {
+        "planning": 1,
+        "setup": 10142,
+        "observation": 2635,
+        "model": 7882,
+        "action": 21910,
+        "check": 13174,
+        "artifact": 4557,
+        "cleanup": 1216
+      },
+      "model": {
+        "requests": 26,
+        "plannerRequests": 0,
+        "jevRequests": 26,
+        "cost": 0.001281168,
+        "models": [
+          "typesafe/jev-1.13-20260917"
+        ]
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "FAIL",
+          "durationMs": 9277,
+          "passedChecks": 0,
+          "totalChecks": 1,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "FAIL",
+          "durationMs": 11678,
+          "passedChecks": 2,
+          "totalChecks": 3,
+          "failedChecks": [
+            {
+              "kind": "absent",
+              "expected": false,
+              "observed": true
+            }
+          ]
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "FAIL",
+          "durationMs": 13420,
+          "passedChecks": 2,
+          "totalChecks": 3,
+          "failedChecks": [
+            {
+              "kind": "number",
+              "expected": 72,
+              "observed": 77
+            }
+          ]
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "FAIL",
+          "durationMs": 12287,
+          "passedChecks": 1,
+          "totalChecks": 2,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "FAIL",
+          "durationMs": 15054,
+          "passedChecks": 1,
+          "totalChecks": 2,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "platform": "android",
+      "mode": "broken",
+      "round": 8,
+      "baselineFaults": [
+        "invalid-login",
+        "wrong-filter",
+        "wrong-total",
+        "ineffective-removal",
+        "lost-persistence"
+      ],
+      "baselineVerified": true,
+      "correctFaults": [
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "verdict": "FAIL",
+      "durationMs": 61272,
+      "phasesMs": {
+        "planning": 1,
+        "setup": 10357,
+        "observation": 2717,
+        "model": 6789,
+        "action": 22326,
+        "check": 13296,
+        "artifact": 4589,
+        "cleanup": 1195
+      },
+      "model": {
+        "requests": 25,
+        "plannerRequests": 0,
+        "jevRequests": 25,
+        "cost": 0.001257984,
+        "models": [
+          "typesafe/jev-1.13-20260917"
+        ]
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "FAIL",
+          "durationMs": 8616,
+          "passedChecks": 0,
+          "totalChecks": 1,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "FAIL",
+          "durationMs": 11866,
+          "passedChecks": 2,
+          "totalChecks": 3,
+          "failedChecks": [
+            {
+              "kind": "absent",
+              "expected": false,
+              "observed": true
+            }
+          ]
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "FAIL",
+          "durationMs": 13724,
+          "passedChecks": 2,
+          "totalChecks": 3,
+          "failedChecks": [
+            {
+              "kind": "number",
+              "expected": 72,
+              "observed": 77
+            }
+          ]
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "FAIL",
+          "durationMs": 12276,
+          "passedChecks": 1,
+          "totalChecks": 2,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "FAIL",
+          "durationMs": 14787,
+          "passedChecks": 1,
+          "totalChecks": 2,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "platform": "android",
+      "mode": "broken",
+      "round": 9,
+      "baselineFaults": [
+        "invalid-login",
+        "wrong-filter",
+        "wrong-total",
+        "ineffective-removal",
+        "lost-persistence"
+      ],
+      "baselineVerified": true,
+      "correctFaults": [
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "verdict": "FAIL",
+      "durationMs": 61584,
+      "phasesMs": {
+        "planning": 1,
+        "setup": 10580,
+        "observation": 2707,
+        "model": 7243,
+        "action": 21884,
+        "check": 13173,
+        "artifact": 4633,
+        "cleanup": 1158
+      },
+      "model": {
+        "requests": 26,
+        "plannerRequests": 0,
+        "jevRequests": 26,
+        "cost": 0.001281168,
+        "models": [
+          "typesafe/jev-1.13-20260917"
+        ]
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "FAIL",
+          "durationMs": 8761,
+          "passedChecks": 0,
+          "totalChecks": 1,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "FAIL",
+          "durationMs": 11757,
+          "passedChecks": 2,
+          "totalChecks": 3,
+          "failedChecks": [
+            {
+              "kind": "absent",
+              "expected": false,
+              "observed": true
+            }
+          ]
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "FAIL",
+          "durationMs": 13682,
+          "passedChecks": 2,
+          "totalChecks": 3,
+          "failedChecks": [
+            {
+              "kind": "number",
+              "expected": 72,
+              "observed": 77
+            }
+          ]
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "FAIL",
+          "durationMs": 12636,
+          "passedChecks": 1,
+          "totalChecks": 2,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "FAIL",
+          "durationMs": 14745,
+          "passedChecks": 1,
+          "totalChecks": 2,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "platform": "android",
+      "mode": "broken",
+      "round": 10,
+      "baselineFaults": [
+        "invalid-login",
+        "wrong-filter",
+        "wrong-total",
+        "ineffective-removal",
+        "lost-persistence"
+      ],
+      "baselineVerified": true,
+      "correctFaults": [
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "verdict": "FAIL",
+      "durationMs": 61016,
+      "phasesMs": {
+        "planning": 1,
+        "setup": 10268,
+        "observation": 2574,
+        "model": 7113,
+        "action": 22039,
+        "check": 13231,
+        "artifact": 4578,
+        "cleanup": 1204
+      },
+      "model": {
+        "requests": 25,
+        "plannerRequests": 0,
+        "jevRequests": 25,
+        "cost": 0.001257984,
+        "models": [
+          "typesafe/jev-1.13-20260917"
+        ]
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "FAIL",
+          "durationMs": 8339,
+          "passedChecks": 0,
+          "totalChecks": 1,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "FAIL",
+          "durationMs": 11898,
+          "passedChecks": 2,
+          "totalChecks": 3,
+          "failedChecks": [
+            {
+              "kind": "absent",
+              "expected": false,
+              "observed": true
+            }
+          ]
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "FAIL",
+          "durationMs": 13770,
+          "passedChecks": 2,
+          "totalChecks": 3,
+          "failedChecks": [
+            {
+              "kind": "number",
+              "expected": 72,
+              "observed": 77
+            }
+          ]
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "FAIL",
+          "durationMs": 12060,
+          "passedChecks": 1,
+          "totalChecks": 2,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "FAIL",
+          "durationMs": 14939,
+          "passedChecks": 1,
+          "totalChecks": 2,
+          "failedChecks": [
+            {
+              "kind": "visible",
+              "expected": true,
+              "observed": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "platform": "android",
+      "mode": "replay",
+      "round": 1,
+      "baselineFaults": [
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy"
+      ],
+      "baselineVerified": true,
+      "verdict": "PASS",
+      "durationMs": 44806,
+      "phasesMs": {
+        "planning": 0,
+        "setup": 10174,
+        "observation": 2695,
+        "model": 0,
+        "action": 21405,
+        "check": 4679,
+        "artifact": 4592,
+        "cleanup": 1259
+      },
+      "model": {
+        "requests": 0,
+        "plannerRequests": 0,
+        "jevRequests": 0,
+        "cost": 0,
+        "models": []
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "PASS",
+          "durationMs": 6807,
+          "passedChecks": 1,
+          "totalChecks": 1,
+          "failedChecks": []
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "PASS",
+          "durationMs": 8582,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "PASS",
+          "durationMs": 10058,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "PASS",
+          "durationMs": 8470,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "PASS",
+          "durationMs": 10885,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        }
+      ]
+    },
+    {
+      "platform": "android",
+      "mode": "replay",
+      "round": 2,
+      "baselineFaults": [
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy"
+      ],
+      "baselineVerified": true,
+      "verdict": "PASS",
+      "durationMs": 44786,
+      "phasesMs": {
+        "planning": 0,
+        "setup": 9965,
+        "observation": 2716,
+        "model": 0,
+        "action": 21602,
+        "check": 4649,
+        "artifact": 4622,
+        "cleanup": 1228
+      },
+      "model": {
+        "requests": 0,
+        "plannerRequests": 0,
+        "jevRequests": 0,
+        "cost": 0,
+        "models": []
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "PASS",
+          "durationMs": 7001,
+          "passedChecks": 1,
+          "totalChecks": 1,
+          "failedChecks": []
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "PASS",
+          "durationMs": 8378,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "PASS",
+          "durationMs": 10062,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "PASS",
+          "durationMs": 8594,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "PASS",
+          "durationMs": 10748,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        }
+      ]
+    },
+    {
+      "platform": "android",
+      "mode": "replay",
+      "round": 3,
+      "baselineFaults": [
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy"
+      ],
+      "baselineVerified": true,
+      "verdict": "PASS",
+      "durationMs": 45745,
+      "phasesMs": {
+        "planning": 0,
+        "setup": 10267,
+        "observation": 2778,
+        "model": 0,
+        "action": 21989,
+        "check": 4668,
+        "artifact": 4621,
+        "cleanup": 1214
+      },
+      "model": {
+        "requests": 0,
+        "plannerRequests": 0,
+        "jevRequests": 0,
+        "cost": 0,
+        "models": []
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "PASS",
+          "durationMs": 7026,
+          "passedChecks": 1,
+          "totalChecks": 1,
+          "failedChecks": []
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "PASS",
+          "durationMs": 8700,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "PASS",
+          "durationMs": 9986,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "PASS",
+          "durationMs": 8782,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "PASS",
+          "durationMs": 11250,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        }
+      ]
+    },
+    {
+      "platform": "android",
+      "mode": "replay",
+      "round": 4,
+      "baselineFaults": [
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy"
+      ],
+      "baselineVerified": true,
+      "verdict": "PASS",
+      "durationMs": 45020,
+      "phasesMs": {
+        "planning": 0,
+        "setup": 10563,
+        "observation": 2588,
+        "model": 0,
+        "action": 21380,
+        "check": 4649,
+        "artifact": 4625,
+        "cleanup": 1215
+      },
+      "model": {
+        "requests": 0,
+        "plannerRequests": 0,
+        "jevRequests": 0,
+        "cost": 0,
+        "models": []
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "PASS",
+          "durationMs": 6866,
+          "passedChecks": 1,
+          "totalChecks": 1,
+          "failedChecks": []
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "PASS",
+          "durationMs": 8567,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "PASS",
+          "durationMs": 10026,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "PASS",
+          "durationMs": 8441,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "PASS",
+          "durationMs": 11118,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        }
+      ]
+    },
+    {
+      "platform": "android",
+      "mode": "replay",
+      "round": 5,
+      "baselineFaults": [
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy"
+      ],
+      "baselineVerified": true,
+      "verdict": "PASS",
+      "durationMs": 45216,
+      "phasesMs": {
+        "planning": 0,
+        "setup": 10317,
+        "observation": 2504,
+        "model": 0,
+        "action": 21960,
+        "check": 4635,
+        "artifact": 4600,
+        "cleanup": 1199
+      },
+      "model": {
+        "requests": 0,
+        "plannerRequests": 0,
+        "jevRequests": 0,
+        "cost": 0,
+        "models": []
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "PASS",
+          "durationMs": 6802,
+          "passedChecks": 1,
+          "totalChecks": 1,
+          "failedChecks": []
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "PASS",
+          "durationMs": 8704,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "PASS",
+          "durationMs": 10033,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "PASS",
+          "durationMs": 8619,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "PASS",
+          "durationMs": 11056,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        }
+      ]
+    },
+    {
+      "platform": "android",
+      "mode": "replay",
+      "round": 6,
+      "baselineFaults": [
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy"
+      ],
+      "baselineVerified": true,
+      "verdict": "PASS",
+      "durationMs": 45205,
+      "phasesMs": {
+        "planning": 0,
+        "setup": 10327,
+        "observation": 2594,
+        "model": 0,
+        "action": 21733,
+        "check": 4645,
+        "artifact": 4669,
+        "cleanup": 1235
+      },
+      "model": {
+        "requests": 0,
+        "plannerRequests": 0,
+        "jevRequests": 0,
+        "cost": 0,
+        "models": []
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "PASS",
+          "durationMs": 6996,
+          "passedChecks": 1,
+          "totalChecks": 1,
+          "failedChecks": []
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "PASS",
+          "durationMs": 8499,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "PASS",
+          "durationMs": 10033,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "PASS",
+          "durationMs": 8521,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "PASS",
+          "durationMs": 11154,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        }
+      ]
+    },
+    {
+      "platform": "android",
+      "mode": "replay",
+      "round": 7,
+      "baselineFaults": [
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy"
+      ],
+      "baselineVerified": true,
+      "verdict": "PASS",
+      "durationMs": 45288,
+      "phasesMs": {
+        "planning": 0,
+        "setup": 10151,
+        "observation": 2636,
+        "model": 0,
+        "action": 21463,
+        "check": 4677,
+        "artifact": 4764,
+        "cleanup": 1193
+      },
+      "model": {
+        "requests": 0,
+        "plannerRequests": 0,
+        "jevRequests": 0,
+        "cost": 0,
+        "models": []
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "PASS",
+          "durationMs": 6677,
+          "passedChecks": 1,
+          "totalChecks": 1,
+          "failedChecks": []
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "PASS",
+          "durationMs": 8735,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "PASS",
+          "durationMs": 10001,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "PASS",
+          "durationMs": 8747,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "PASS",
+          "durationMs": 11121,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        }
+      ]
+    },
+    {
+      "platform": "android",
+      "mode": "replay",
+      "round": 8,
+      "baselineFaults": [
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy"
+      ],
+      "baselineVerified": true,
+      "verdict": "PASS",
+      "durationMs": 45001,
+      "phasesMs": {
+        "planning": 0,
+        "setup": 10397,
+        "observation": 2772,
+        "model": 0,
+        "action": 21195,
+        "check": 4629,
+        "artifact": 4799,
+        "cleanup": 1207
+      },
+      "model": {
+        "requests": 0,
+        "plannerRequests": 0,
+        "jevRequests": 0,
+        "cost": 0,
+        "models": []
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "PASS",
+          "durationMs": 6884,
+          "passedChecks": 1,
+          "totalChecks": 1,
+          "failedChecks": []
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "PASS",
+          "durationMs": 8625,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "PASS",
+          "durationMs": 10062,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "PASS",
+          "durationMs": 8578,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "PASS",
+          "durationMs": 10849,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        }
+      ]
+    },
+    {
+      "platform": "android",
+      "mode": "replay",
+      "round": 9,
+      "baselineFaults": [
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy"
+      ],
+      "baselineVerified": true,
+      "verdict": "PASS",
+      "durationMs": 45019,
+      "phasesMs": {
+        "planning": 0,
+        "setup": 10158,
+        "observation": 2732,
+        "model": 0,
+        "action": 21415,
+        "check": 4693,
+        "artifact": 4632,
+        "cleanup": 1184
+      },
+      "model": {
+        "requests": 0,
+        "plannerRequests": 0,
+        "jevRequests": 0,
+        "cost": 0,
+        "models": []
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "PASS",
+          "durationMs": 6918,
+          "passedChecks": 1,
+          "totalChecks": 1,
+          "failedChecks": []
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "PASS",
+          "durationMs": 8499,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "PASS",
+          "durationMs": 10009,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "PASS",
+          "durationMs": 8563,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "PASS",
+          "durationMs": 11027,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        }
+      ]
+    },
+    {
+      "platform": "android",
+      "mode": "replay",
+      "round": 10,
+      "baselineFaults": [
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy",
+        "healthy"
+      ],
+      "baselineVerified": true,
+      "verdict": "PASS",
+      "durationMs": 45530,
+      "phasesMs": {
+        "planning": 0,
+        "setup": 10061,
+        "observation": 2663,
+        "model": 0,
+        "action": 22105,
+        "check": 4678,
+        "artifact": 4562,
+        "cleanup": 1257
+      },
+      "model": {
+        "requests": 0,
+        "plannerRequests": 0,
+        "jevRequests": 0,
+        "cost": 0,
+        "models": []
+      },
+      "cases": [
+        {
+          "name": "Invalid login is rejected",
+          "verdict": "PASS",
+          "durationMs": 7137,
+          "passedChecks": 1,
+          "totalChecks": 1,
+          "failedChecks": []
+        },
+        {
+          "name": "Search filters the catalog",
+          "verdict": "PASS",
+          "durationMs": 8417,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Quantity updates the total",
+          "verdict": "PASS",
+          "durationMs": 10209,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Removal empties the cart",
+          "verdict": "PASS",
+          "durationMs": 8782,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        },
+        {
+          "name": "Cart persists after relaunch",
+          "verdict": "PASS",
+          "durationMs": 10982,
+          "passedChecks": 3,
+          "totalChecks": 3,
+          "failedChecks": []
+        }
+      ]
+    }
+  ]
+}

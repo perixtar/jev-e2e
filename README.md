@@ -2,19 +2,29 @@
 
 # jev-e2e
 
-**Test your website in plain English. Get evidence for every result.**
+**Test websites and native apps in plain English. Get evidence for every result.**
 
 [![Status: alpha](https://img.shields.io/badge/status-alpha-orange)](TEST_RESULTS.md)
-[![Node: 22+](https://img.shields.io/badge/node-22%2B-339933)](https://nodejs.org/)
+[![Node: 22.12+](https://img.shields.io/badge/node-22.12%2B-339933)](https://nodejs.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-[Quick start](#quick-start) · [Write a test](#write-a-test) · [Benchmarks](#live-ebay-benchmark) · [CLI reference](docs/USAGE.md) · [Contribute](CONTRIBUTING.md)
+[Quick start](#quick-start) · [Native mobile](docs/MOBILE.md) · [Write a test](#write-a-test) · [Results](MOBILE_TEST_RESULTS.md) · [CLI reference](docs/USAGE.md) · [Contribute](CONTRIBUTING.md)
 
 </div>
 
-Describe a flow and what should be true at the end. jev-e2e turns it into a test plan, uses Jev to select controls on the page, and runs the test with Playwright. Each result is **PASS**, **FAIL**, or **BLOCKED**, with an HTML report, JSON, and masked screenshots.
+Describe a flow and what should be true. jev-e2e turns it into a test plan, uses Jev to select accessible controls, and runs it with Playwright or a local simulator/emulator. Each result is **PASS**, **FAIL**, or **BLOCKED**, with an HTML report, JSON, and privacy-aware evidence.
 
-**Local alpha:** CLI and browser workbench for Chromium websites. Install from source; an npm release is not yet available.
+**Local alpha:** CLI and workbench for Chromium websites, iOS Simulator, and Android Emulator. Install from source; an npm release is not yet available.
+
+## Watch one test on iOS and Android
+
+<a href="docs/assets/mobile-demo-10s.mp4"><img src="docs/assets/mobile-demo-poster.jpg" alt="Jev Shop native test on a large iOS simulator screen with elapsed time and billed Jev cost" width="420"></a>
+
+[Watch the 10-second edit](docs/assets/mobile-demo-10s.mp4) · [Watch the real-time recorded segments](docs/assets/mobile-demo-real-time.mp4) · [Read the native setup](docs/MOBILE.md)
+
+One authored case signs in, searches for a lamp, adds it to the cart, changes the quantity, checks the total, relaunches, verifies persistence, removes it, and enables notifications. The same React Native fixture ran on **iOS Simulator and Android Emulator**; all **12 explicit checks passed** on each recorded run. The timers and billed Jev costs come from those runs. The short edit speeds up the iOS and Android footage separately, while the second video plays the shareable recorded segments in real time. Screens with input fields (including sign-in and search) and transient relaunch screens are excluded for privacy, so the footage has capture cuts. These two runs are a demonstration; repeated reliability results are reported separately in [native validation](MOBILE_TEST_RESULTS.md).
+
+In a separate controlled evaluation of five cases × ten first attempts per mode and platform, healthy runs passed **50/50** on each device, seeded faults produced **50/50 correct FAIL** on each, and saved replay passed **50/50** on each. iOS replay used Jev to repair 30 stale controls; Android replay used no model calls. See the [method, cost, timing, and limitations](MOBILE_TEST_RESULTS.md) and [all 300 sanitized case results](docs/benchmarks/native-mobile-2026-09-19.json).
 
 ## Watch the eBay comparison
 
@@ -29,14 +39,14 @@ This is a UI execution experiment with a shared human-authored plan and an exten
 ## Why jev-e2e?
 
 - **Write cases in plain English.** Use an optional planner for prose, or explicit `Goal`, `Step`, and `Expect` templates without it.
-- **Check the outcome.** Playwright verifies expectations independently. Missing evidence or unsupported requirements produce BLOCKED.
+- **Check the outcome.** The runner verifies expectations independently of Jev's choices. Missing evidence or unsupported requirements produce BLOCKED.
 - **See what happened.** Reports include expected and observed values, actions, timing, provider usage, and screenshots.
 - **Replay successful flows.** Reuse saved controls and recheck assertions. An unchanged flow can replay with zero model calls; stale targets require Jev to repair them.
 - **Run locally with limits.** Use your own OpenRouter key, authentication fixtures, request limits, deadlines, and cost budget. Stop execution from the workbench or with Ctrl+C.
 
 ## Quick start
 
-Requires **Node.js 22+** and one **OpenRouter API key**.
+Requires **Node.js 22.12+** and one **OpenRouter API key**.
 
 ### 1. Install from source
 
@@ -82,6 +92,18 @@ npm run ui
 
 Open the printed workbench URL, normally **http://127.0.0.1:4007**. Point it at the demo on **http://127.0.0.1:4177**, review a plan, run it, and inspect the evidence. The demo command creates demo-only fixtures under `.jev-e2e/demo`. Use a fresh project name for repeated create tests; a fresh browser context does not reset application data.
 
+### 5. Test a native app
+
+```sh
+node dist/cli.js doctor --platform ios
+node dist/cli.js devices --platform ios
+node dist/cli.js plan --platform ios --app com.example.app \
+  --cases mobile.cases --fixtures fixtures.json --out reviewed.json
+node dist/cli.js run --plan reviewed.json --device EXACT_ID
+```
+
+Replace `ios` with `android` for an Android Emulator. Native tests use the same case, review, replay, and report flow; the local app needs accessible controls. Explicit `Step:` lines bypass the optional prose planner; `--planner off` makes that choice explicit. See the [native setup and case reference](docs/MOBILE.md).
+
 ## Write a test
 
 Save a case in a `.cases` file. With `--planner on`, describe the flow and give a concrete expectation:
@@ -125,16 +147,17 @@ For product validation, see the separate [controlled-demo test results](TEST_RES
 | --- | --- |
 | Optional prose planner | Converts your case into semantic steps, input bindings, and explicit expectations. Saved plans need no new interpretation. |
 | Jev | Selects from observed controls and navigation choices using OpenRouter's native Decisions API. |
-| Playwright | Executes actions and checks expectations independently. |
+| Playwright / agent-device | Executes browser or local native actions. |
+| Evidence checker | Verifies authored browser or accessibility expectations independently of Jev's choice. |
 | CLI + local workbench | Share the runner, budgets, cancellation, saved plans, and evidence reports. |
 
 Jev uses `POST /api/alpha/decisions`; the optional planner uses `POST /api/v1/chat/completions`. Both use standard `fetch`. Direct TypeSafe transport is not implemented. [Provider setup](OPENROUTER_SETUP.md) · [Technical plan](TECHNICAL_PLAN.md)
 
 ## Scope and privacy
 
-The alpha supports common Chromium forms, buttons, links, native selects, checkboxes, authenticated fixtures, and async results. Native desktop/mobile apps, CAPTCHA, canvas, complex frames, payment-provider flows, and subjective visual judgments are outside this release. Hosted infrastructure is a later stage.
+The alpha supports common Chromium flows plus accessible local iOS and Android apps. Physical phones, hosted devices, native desktop apps, CAPTCHA, arbitrary canvas controls, complex WebViews/frames, payment-provider flows, biometrics, and subjective visual judgments remain outside this release. Hosted infrastructure is a later stage.
 
-API keys stay in the server process. Known fixture/auth values are redacted from observations and reports; input fields are masked in screenshots. Visible application text is sent to OpenRouter, and unrelated page content can remain in reports. Inspect evidence before sharing it. Reports stay under your local `.jev-e2e/runs`; raw trace recording is not implemented. No telemetry is required.
+API keys stay in the server process. Known fixture/auth values are redacted from observations and reports; input screens are omitted from screenshots. Visible application text is sent to OpenRouter, and unrelated app or page content can remain in reports. Native recording is explicit, local, and starts after credential-entry steps. If a later screen exposes an input or known secret, the whole report clip is discarded. Inspect evidence before sharing it. Reports and recordings stay under your local `.jev-e2e/runs`; nothing uploads automatically. No telemetry is required.
 
 ## Help shape the project
 

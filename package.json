@@ -1,11 +1,11 @@
 {
   "name": "jev-e2e",
   "version": "0.1.0-alpha.1",
-  "description": "Test web apps from natural-language cases with Jev, Playwright, and checked evidence.",
+  "description": "Test websites and native mobile apps from natural-language cases with Jev and checked evidence.",
   "license": "MIT",
   "type": "module",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.12"
   },
   "bin": {
     "jev-e2e": "dist/cli.js"
@@ -20,6 +20,8 @@
     "dist",
     "public",
     "examples",
+    "docs/MOBILE.md",
+    "MOBILE_TEST_RESULTS.md",
     "README.md",
     "CONTRIBUTING.md",
     "TEST_RESULTS.md",
@@ -34,6 +36,9 @@
     "check": "tsc --noEmit",
     "test": "npm run build && node --test test/*.test.mjs",
     "test:live": "npm run build && node scripts/evaluate.mjs",
+    "test:mobile": "npm run build && node scripts/evaluate-mobile.mjs",
+    "test:mobile:language": "npm run build && node scripts/evaluate-mobile-language.mjs",
+    "test:mobile:sdk": "npm run build && node test/mobile-live.mjs",
     "ui": "node dist/cli.js ui",
     "demo": "node dist/cli.js demo",
     "prepack": "npm run build"
@@ -53,5 +58,8 @@
   "bugs": {
     "url": "https://github.com/perixtar/jev-e2e/issues"
   },
-  "homepage": "https://github.com/perixtar/jev-e2e#readme"
+  "homepage": "https://github.com/perixtar/jev-e2e#readme",
+  "optionalDependencies": {
+    "agent-device": "0.21.6"
+  }
 }

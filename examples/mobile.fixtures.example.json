@@ -1,0 +1,8 @@
+{
+  "inputs": {
+    "email": { "env": "E2E_TEST_EMAIL" },
+    "password": { "env": "E2E_TEST_PASSWORD" },
+    "invalidPassword": { "env": "E2E_TEST_INVALID_PASSWORD" }
+  },
+  "auth": {}
+}
