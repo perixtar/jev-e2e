@@ -292,22 +292,28 @@ export class MobileDriver {
     if (!this.captureAllowed(observation.native)) return false;
     const result = await this.connection.call('screenshot', { path: expected, normalizeStatusBar: true }, signal, 10000);
     const returned = typeof result?.path === 'string' ? resolve(result.path) : null;
+    const returnedChild = returned ? relative(dirname(expected), returned) : null;
+    const returnedIsOwned = Boolean(returned && extname(returned).toLowerCase() === '.png' && returnedChild !== null && !isAbsolute(returnedChild) && returnedChild !== '..' && !returnedChild.startsWith(`..${sep}`));
+    const discard = async () => {
+      await removeLocalArtifact(expected);
+      if (returnedIsOwned && returned !== expected) await removeLocalArtifact(returned!);
+    };
     const identifiers = result?.identifiers;
     const returnedApp = identifiers?.appBundleId ?? identifiers?.appId ?? identifiers?.package;
     const returnedDevice = identifiers?.deviceId ?? identifiers?.udid ?? identifiers?.serial;
     if (returnedApp !== this.appIdentity || returnedDevice !== this.target.device) {
-      await removeLocalArtifact(expected);
+      await discard();
       throw new BlockedError('Native screenshot returned mismatched app/device identity. The artifact was discarded.');
     }
     let finalState: NativeSnapshot;
     try { finalState = await this.rawSnapshot(signal); }
-    catch { await removeLocalArtifact(expected); throw new BlockedError('Native screenshot ownership could not be confirmed after capture. The artifact was discarded.'); }
+    catch { await discard(); throw new BlockedError('Native screenshot ownership could not be confirmed after capture. The artifact was discarded.'); }
     if ((finalState.appBundleId ?? finalState.identifiers?.appBundleId ?? finalState.identifiers?.appId) !== this.appIdentity || !finalState.nodes?.length || !['healthy', 'recovered'].includes(finalState.snapshotQuality?.state ?? '') || !this.captureAllowed(finalState)) {
-      await removeLocalArtifact(expected);
+      await discard();
       throw new BlockedError('Native screenshot ended on an unsafe or mismatched app screen. The artifact was discarded.');
     }
     const artifact = await lstat(expected).catch((error: NodeJS.ErrnoException) => { if (error.code === 'ENOENT') return null; throw error; });
-    if (returned !== expected || !artifact?.isFile() || artifact.size <= 0) { await removeLocalArtifact(expected); throw new BlockedError('Native screenshot did not produce the requested fresh local artifact.'); }
+    if (returned !== expected || !artifact?.isFile() || artifact.size <= 0) { await discard(); throw new BlockedError('Native screenshot did not produce the requested fresh local artifact.'); }
     await chmod(expected, 0o600); return true;
   }
   interrupt() { this.connection.interrupt(); }

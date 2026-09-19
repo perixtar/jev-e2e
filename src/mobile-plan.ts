@@ -7,8 +7,8 @@ const quote = (text: string) => { try { return JSON.parse(`"${text}"`) as string
 const empty = (action: Step['action'], target: string | null = null): Step => ({ action, target, value: null, fixture: null });
 function negatedNativeAction(text: string): boolean {
   const action = '(?:tap(?:ping)?|click(?:ing)?|fill(?:ing)?|replac(?:e|ing)|check(?:ing)?|uncheck(?:ing)?|enabl(?:e|ing)|disabl(?:e|ing)|relaunch(?:ing)?|restart(?:ing)?|scroll(?:ing)?|go(?:ing)?\\s+back|dismiss(?:ing)?|hid(?:e|ing)|wait(?:ing)?)';
-  return new RegExp('(?:\\bnever\\b|\\bdo\\s+not\\b|\\bdon[’\']t\\b|\\bmust\\s+not\\b|\\bshould\\s+not\\b|\\bwithout\\b)[^.!?;\\n]{0,120}\\b' + action + '\\b', 'i').test(text)
-    || new RegExp('\\b(?:avoid|skip|except)\\s+(?:to\\s+)?' + action + '\\b', 'i').test(text);
+  return new RegExp('(?:\\bnever\\b|\\bnot(?:\\s+to)?\\b|\\bcannot\\b|\\b[A-Za-z]+n[’\']t\\b|\\bwithout\\b)[^.!?;\\n]{0,120}\\b' + action + '\\b', 'i').test(text)
+    || new RegExp('\\b(?:avoid|skip|except(?:\\s+for)?|refrain\\s+from|instead\\s+of|rather\\s+than)\\s+(?:to\\s+)?' + action + '\\b', 'i').test(text);
 }
 export function nativeStep(text: string): Step {
   if (/^(relaunch|back|dismiss keyboard)$/i.test(text)) return empty(/^dismiss/i.test(text) ? 'keyboard' : text.toLowerCase() as Step['action']);
@@ -95,9 +95,16 @@ function privateInputLiteral(text: string): boolean {
         if (step.fixture && sensitiveInputTarget(step.target ?? '')) continue;
       } catch { /* Unknown Step syntax is handled later, but must still be scanned. */ }
     }
-    // A case title may describe a password/OTP behavior without containing the
-    // value. Direct secret forms above are still rejected from titles.
-    if (field?.[1].toLowerCase() === 'case') continue;
+    if (field?.[1].toLowerCase() === 'case') {
+      const privateName = '(?:password|passcode|pass\\s*phrase|pin|otp|one[- ]time(?:\\s+(?:password|code))?|verification\\s+code|security\\s+code|credit\\s+card|card\\s+number|cvv|cvc|social\\s+security(?:\\s+number)?|ssn|token|secret|api.?key|e-?mail|user\\s*name)';
+      const supplied = body.match(new RegExp('\\b' + privateName + '\\b\\s*(?:field\\b\\s*)?(?:(?:is|=|:|value\\s+is)\\s*)?("(?:\\\\.|[^"\\\\])+"|\'(?:\\\\.|[^\'\\\\])+\'|[^\\s,.;]+)', 'i'));
+      if (supplied) {
+        const candidate = supplied[1].replace(/^["']|["']$/g, '');
+        const benign = /^(?:test|testing|flow|reset|screen|field|input|validation|verification|rejected|accepted|behavior|case|works|error|policy|expectation)$/i.test(candidate);
+        if (!candidate.startsWith('@') && (!benign || secretShaped(candidate))) return true;
+      }
+      continue;
+    }
     if (sensitiveInputTarget(authored)) return true;
   }
   const authored = text.replace(fixtureBinding, '').replace(/@[A-Za-z0-9_.-]+/g, '');
