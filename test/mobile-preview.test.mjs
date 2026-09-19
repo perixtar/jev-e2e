@@ -34,7 +34,7 @@ test('live native preview publishes only verified pixels and discards canceled s
   try {
     ui = await startUi(0, directory);
     const token = (await (await fetch(ui.url + '/api/session')).json()).token;
-    const input = { platform: 'ios', app: 'dev.example.app', device: 'sim', planner: 'off',
+    const input = { platform: 'android', app: 'dev.example.app', device: 'sim', planner: 'off',
       casesText: 'Case: Safe preview\nGoal: Inspect ready state\nStep: Wait for text "Ready"\nExpect: text "Ready" is visible\nStep: Wait for text "Ready"\nExpect: text "Ready" is visible' };
     const post = async (path, data) => {
       const response = await fetch(ui.url + path, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-jev-token': token }, body: JSON.stringify(data) });

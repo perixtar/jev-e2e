@@ -335,18 +335,18 @@ test('saved native replay waits for a late control after relaunch without callin
 test('rejected private mobile prose is redacted from every persisted report artifact',async()=>{
   const directory=await mkdtemp(join(tmpdir(),'jev-native-private-source-')),secret='correct-horse-private-9173';let requests=0;
   try{
-    const result=await runSuite({platform:'ios',app:'dev.never.opened',device:'none',casesText:`Case: Literal password\nGoal: Use ${secret} as password, then tap "Sign in".\nExpect: text "Welcome" is visible`,planner:'on',outputDirectory:directory,fetchImpl:async()=>{requests++;throw Error('Provider must not be called');}});
+    const result=await runSuite({platform:'android',app:'dev.never.opened',device:'none',casesText:`Case: Literal password\nGoal: Use ${secret} as password, then tap "Sign in".\nExpect: text "Welcome" is visible`,planner:'on',outputDirectory:directory,fetchImpl:async()=>{requests++;throw Error('Provider must not be called');}});
     assert.equal(result.verdict,'BLOCKED');assert.equal(requests,0);assert.equal(result.cases[0].actions.length,0);
     for(const name of ['report.json','plan.json','report.html'])assert.ok(!(await readFile(join(directory,name),'utf8')).includes(secret),name);
     const persisted=JSON.parse(await readFile(join(directory,'report.json'),'utf8'));assert.equal(persisted.durationMs,result.durationMs);assert.deepEqual(persisted.timings,result.timings);assert.ok(result.timings.artifact>=1);
     assert.equal(result.plan.cases[0].source,'[PRIVATE INPUT REDACTED]');
-    const negative=await runSuite({platform:'ios',app:'dev.never.opened',device:'none',casesText:`Case: Private negative ${secret}\nGoal: Never tap "Delete account". Use ${secret} as password.\nExpect: text "Welcome" is visible`,planner:'on',outputDirectory:directory,fetchImpl:async()=>{requests++;throw Error('Provider must not be called');}});
+    const negative=await runSuite({platform:'android',app:'dev.never.opened',device:'none',casesText:`Case: Private negative ${secret}\nGoal: Never tap "Delete account". Use ${secret} as password.\nExpect: text "Welcome" is visible`,planner:'on',outputDirectory:directory,fetchImpl:async()=>{requests++;throw Error('Provider must not be called');}});
     assert.equal(negative.verdict,'BLOCKED');assert.equal(requests,0);assert.equal(negative.plan.cases[0].source,'[PRIVATE INPUT REDACTED]');assert.ok(!JSON.stringify(negative).includes(secret));
     for(const name of ['report.json','plan.json','report.html'])assert.ok(!(await readFile(join(directory,name),'utf8')).includes(secret),name);
-    const recovery=await runSuite({platform:'ios',app:'dev.never.opened',device:'none',casesText:'Case: Recovery code\nGoal: Tap "Verify" with recovery code 491827.\nExpect: text "Welcome" is visible',planner:'on',outputDirectory:directory,fetchImpl:async()=>{requests++;throw Error('Provider must not be called');}});
+    const recovery=await runSuite({platform:'android',app:'dev.never.opened',device:'none',casesText:'Case: Recovery code\nGoal: Tap "Verify" with recovery code 491827.\nExpect: text "Welcome" is visible',planner:'on',outputDirectory:directory,fetchImpl:async()=>{requests++;throw Error('Provider must not be called');}});
     assert.equal(recovery.verdict,'BLOCKED');assert.equal(requests,0);assert.equal(recovery.plan.cases[0].source,'[PRIVATE INPUT REDACTED]');
     for(const name of ['report.json','plan.json','report.html'])assert.ok(!(await readFile(join(directory,name),'utf8')).includes('491827'),name);
-    const short=await runSuite({platform:'ios',app:'dev.never.opened',device:'none',casesText:'Case: Short PIN\nGoal: Use qZ as PIN.\nStep: Tap "Sign in"\nExpect: text "Welcome" is visible',planner:'on',outputDirectory:directory,fetchImpl:async()=>{requests++;throw Error('Provider must not be called');}});
+    const short=await runSuite({platform:'android',app:'dev.never.opened',device:'none',casesText:'Case: Short PIN\nGoal: Use qZ as PIN.\nStep: Tap "Sign in"\nExpect: text "Welcome" is visible',planner:'on',outputDirectory:directory,fetchImpl:async()=>{requests++;throw Error('Provider must not be called');}});
     assert.equal(short.verdict,'BLOCKED');assert.equal(requests,0);assert.equal(short.plan.cases[0].source,'[PRIVATE INPUT REDACTED]');
     assert.ok(!JSON.stringify(short).includes('qZ'));
     for(const name of ['report.json','plan.json','report.html'])assert.ok(!(await readFile(join(directory,name),'utf8')).includes('qZ'),name);
@@ -436,8 +436,9 @@ test('native saved plans bind platform/app/baseline and reject altered targets o
   await rm(directory,{recursive:true,force:true});
 });
 test('build-path replay pins the installed app identity before any native action',async()=>{
- const directory=await mkdtemp(join(tmpdir(),'jev-build-replay-')),build=join(directory,'Sample.app');
- const source='Case: Identity\nGoal: Inspect the owned app\nStep: Wait for text "Ready"\nExpect: text "Ready" is visible',plan=parseNative(source,'ios');
+ const platform=process.platform==='darwin'?'ios':'android',extension=platform==='ios'?'.app':'.apk';
+ const directory=await mkdtemp(join(tmpdir(),'jev-build-replay-')),build=join(directory,`Sample${extension}`);
+ const source='Case: Identity\nGoal: Inspect the owned app\nStep: Wait for text "Ready"\nExpect: text "Ready" is visible',plan=parseNative(source,platform);
  const names=['open','direct','check','screenshot','close'],original=Object.fromEntries(names.map(name=>[name,MobileDriver.prototype[name]]));
  const originalCwd=process.cwd();
  let installed='dev.original.app',actions=0;
@@ -447,7 +448,7 @@ test('build-path replay pins the installed app identity before any native action
  MobileDriver.prototype.screenshot=async()=>false;
  MobileDriver.prototype.close=async()=>{};
  try{
-  const first=await runSuite({platform:'ios',app:build,device:'sim',plan,outputDirectory:directory});
+  const first=await runSuite({platform,app:build,device:'sim',plan,outputDirectory:directory});
   assert.equal(first.verdict,'PASS');assert.equal(actions,1);assert.equal(first.target.appIdentity,'dev.original.app');
   const saved=await readSavedPlan(join(directory,'plan.json'));assert.equal(saved.target.appIdentity,'dev.original.app');
   installed='dev.replacement.app';
@@ -455,8 +456,8 @@ test('build-path replay pins the installed app identity before any native action
   assert.equal(rejected.verdict,'BLOCKED');assert.equal(rejected.cases[0].actions.length,0);assert.match(rejected.cases[0].reason,/different installed app identity/);assert.equal(actions,1);
   const legacy={...saved,target:{...saved.target,appIdentity:undefined}};legacy.hash=savedHash(legacy.plan,legacy.target,legacy.flows);
   await assert.rejects(runSuite({replay:legacy,outputDirectory:false}),/predates app identity binding/);
-  await mkdir(join(directory,'Bare.app'));process.chdir(directory);
-  const bare={...legacy,target:{...legacy.target,app:'Bare.app'}};bare.hash=savedHash(bare.plan,bare.target,bare.flows);
+  await mkdir(join(directory,`Bare${extension}`));process.chdir(directory);
+  const bare={...legacy,target:{...legacy.target,app:`Bare${extension}`}};bare.hash=savedHash(bare.plan,bare.target,bare.flows);
   await assert.rejects(runSuite({replay:bare,outputDirectory:false}),/predates app identity binding/);
   process.chdir(originalCwd);
   await writeFile(join(directory,'tampered.json'),JSON.stringify({...saved,target:{...saved.target,appIdentity:'dev.replacement.app'}}));
