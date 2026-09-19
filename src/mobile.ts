@@ -1,4 +1,4 @@
-import { mkdir, chmod, unlink, stat, lstat } from 'node:fs/promises';
+import { mkdir, chmod, unlink, stat, lstat, readdir } from 'node:fs/promises';
 import { resolve, extname, dirname, relative, isAbsolute, sep, parse } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -26,14 +26,14 @@ const visible = (node: Node) => node.visibleToUser !== false && node.hittable !=
 const isSystemSurface = (raw: NativeSnapshot) => raw.systemSurfaceOnly === true || raw.androidSnapshot?.systemSurfaceOnly === true || typeof raw.iosSystemSurfaceBundleId === 'string' && raw.iosSystemSurfaceBundleId.length > 0;
 function assertSnapshotOwnership(raw: NativeSnapshot, app: string, device?: string): void {
   if (isSystemSurface(raw)) throw new BlockedError('The observed native surface belongs to the operating system. System dialogs and overlays are unsupported.');
-  const actualApp = raw.appBundleId ?? raw.identifiers?.appBundleId ?? raw.identifiers?.appId ?? raw.identifiers?.package;
-  if (!actualApp || actualApp !== app) throw new BlockedError('The observed app does not match --app. External apps and system dialogs need explicit handling.');
+  const apps = [raw.appBundleId, raw.identifiers?.appBundleId, raw.identifiers?.appId, raw.identifiers?.package].filter(value => value !== undefined && value !== null);
+  if (!apps.length || apps.some(value => value !== app)) throw new BlockedError('The observed app does not match --app. External apps and system dialogs need explicit handling.');
   if (device) {
-    const actualDevice = raw.identifiers?.deviceId ?? raw.identifiers?.udid ?? raw.identifiers?.serial;
+    const disclosed = [raw.identifiers?.deviceId, raw.identifiers?.udid, raw.identifiers?.serial].filter(value => value !== undefined && value !== null);
     // The pinned local SDK omits identifiers from simulator snapshots. The
     // exact device is already bound and verified by apps.open; reject a
     // conflicting capture identifier whenever the backend does disclose one.
-    if (actualDevice && actualDevice !== device) throw new BlockedError('The observed native snapshot does not match the selected device.');
+    if (disclosed.some(value => value !== device)) throw new BlockedError('The observed native snapshot does not match the selected device.');
   }
 }
 async function removeLocalArtifact(path: string): Promise<void> {
@@ -118,6 +118,7 @@ export class MobileDriver {
   private recording = false;
   private recordingPath?: string;
   private recordingArtifacts = new Set<string>();
+  private recordingDirectoryBaseline = new Set<string>();
   recordingMetrics?: { durationMs: number; capturedDurationMs?: number; backend?: string; recorder?: 'confirmed'; nativePathDisposition?: 'retirable' | 'retired' };
   recordingDiscardedReason?: string;
   constructor(target: NativeTarget, private secrets: string[]) {
@@ -240,7 +241,14 @@ export class MobileDriver {
   }
   async startRecording(path: string, signal: AbortSignal): Promise<void> {
     const expected = resolve(path);
-    await mkdir(dirname(expected), { recursive: true, mode: 0o700 });
+    const directory = dirname(expected);
+    await mkdir(directory, { recursive: true, mode: 0o700 });
+    const existing = await readdir(directory, { withFileTypes: true });
+    if (existing.some(entry => {
+      const candidate = resolve(directory, entry.name);
+      return candidate !== expected && this.isOwnedRecordingPath(candidate, expected);
+    })) throw new BlockedError('The recording output already contains files reserved for this clip. Remove or rename them before recording.');
+    this.recordingDirectoryBaseline = new Set(existing.map(entry => entry.name).filter(name => resolve(directory, name) !== expected));
     await removeLocalArtifact(expected);
     // Remember ownership before dispatch. A canceled or timed-out start can
     // still have begun recording on the device; close() removes any clip that
@@ -331,9 +339,9 @@ export class MobileDriver {
     // malformed response must never make an unrelated file in --out deletable.
     const discard = async () => removeLocalArtifact(expected);
     const identifiers = result?.identifiers;
-    const returnedApp = identifiers?.appBundleId ?? identifiers?.appId ?? identifiers?.package;
-    const returnedDevice = identifiers?.deviceId ?? identifiers?.udid ?? identifiers?.serial;
-    if ((returnedApp && returnedApp !== this.appIdentity) || (returnedDevice && returnedDevice !== this.target.device)) {
+    const returnedApps = [identifiers?.appBundleId, identifiers?.appId, identifiers?.package].filter(value => value !== undefined && value !== null);
+    const returnedDevices = [identifiers?.deviceId, identifiers?.udid, identifiers?.serial].filter(value => value !== undefined && value !== null);
+    if (returnedApps.some(value => value !== this.appIdentity) || returnedDevices.some(value => value !== this.target.device)) {
       await discard();
       throw new BlockedError('Native screenshot returned mismatched app/device identity. The artifact was discarded.');
     }
@@ -361,7 +369,7 @@ export class MobileDriver {
     return raw;
   }
   get resolvedApp(): string { return this.appIdentity; }
-  private trackOwnedRecordingPath(candidate: unknown, expected: string): boolean {
+  private isOwnedRecordingPath(candidate: unknown, expected: string): boolean {
     if (typeof candidate !== 'string') return false;
     const path = resolve(candidate), child = relative(dirname(expected), path);
     if (isAbsolute(child) || child === '..' || child.startsWith(`..${sep}`)) return false;
@@ -370,11 +378,25 @@ export class MobileDriver {
     const ownedName = path === expected
       || candidateFile.base === `${expectedFile.name}.gesture-telemetry.json`
       || candidateFile.ext.toLowerCase() === expectedFile.ext.toLowerCase() && /^\d{3}$/.test(chunkIndex);
-    if (!ownedName) return false;
-    this.recordingArtifacts.add(path); return true;
+    return ownedName;
+  }
+  private trackOwnedRecordingPath(candidate: unknown, expected: string): boolean {
+    if (!this.isOwnedRecordingPath(candidate, expected)) return false;
+    this.recordingArtifacts.add(resolve(candidate as string)); return true;
+  }
+  private async discoverOwnedRecordingArtifacts(): Promise<void> {
+    if (!this.recordingPath) return;
+    const expected = resolve(this.recordingPath), directory = dirname(expected);
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      if (this.recordingDirectoryBaseline.has(entry.name)) continue;
+      const candidate = resolve(directory, entry.name);
+      if (this.isOwnedRecordingPath(candidate, expected)) this.recordingArtifacts.add(candidate);
+    }
   }
   private async discardOwnedRecordings(preserve?: string): Promise<void> {
     const failed: string[] = [];
+    try { await this.discoverOwnedRecordingArtifacts(); }
+    catch { failed.push('recording directory scan'); }
     const remaining = new Set<string>();
     for (const path of this.recordingArtifacts) {
       if (path === preserve) { remaining.add(path); continue; }
@@ -392,7 +414,7 @@ export class MobileDriver {
       if (this.opened) { await this.connection.close(); this.opened = false; this.ready = false; }
       else this.connection.interrupt();
     } finally {
-      if (this.recording) { try { await this.discardOwnedRecordings(); } finally { this.recording = false; this.recordingPath = undefined; } }
+      if (this.recording) { try { await this.discardOwnedRecordings(); } finally { this.recording = false; this.recordingPath = undefined; this.recordingDirectoryBaseline.clear(); } }
     }
   }
 }

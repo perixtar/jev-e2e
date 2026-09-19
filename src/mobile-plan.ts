@@ -58,16 +58,32 @@ export function parseNative(text: string, platform: 'ios' | 'android'): Suite {
     } catch (e) { test.blockedReason = e instanceof BlockedError ? e.message : 'Could not parse the mobile case.'; test.steps = []; test.assertions = []; }
     return test;
   });
-  return validateSuite({ version: 2, platform, cases });
+  return redactBlockedNativeCases(validateSuite({ version: 2, platform, cases }));
+}
+export function redactBlockedNativeCases(plan: Suite): Suite {
+  if (plan.version !== 2) return plan;
+  return { ...plan, cases: plan.cases.map((test, index) => test.blockedReason ? { ...test, name: `Blocked mobile case ${index + 1}`, source: '[PRIVATE INPUT REDACTED]', goal: '[PRIVATE INPUT REDACTED]', steps: [], assertions: [] } : test) };
 }
 // Protect bindings and order that the author made unambiguous in prose.
 // Broader phrasing still uses the optional compiler; these are constraints.
-export function authoredNativeSteps(source: string): Step[] {
-  if (negatedNativeAction(source)) throw new BlockedError('Negative native action clauses are ambiguous. Describe only the actions that should run.');
-  const intent = source.split('\n').filter(line => !/^(Case|Expect):/i.test(line)).join('\n');
+function nativeActionExpression(): RegExp {
   const token = '"(?:\\\\.|[^"\\\\])*"';
   const value = '(?:'+token+'|@[A-Za-z0-9_.-]+)';
-  const expression = new RegExp("\\bin\\s+"+token+"\\s+use\\s+"+value+"|\\b(?:fill|replace)\\s+"+token+"\\s+(?:with|using|=)\\s+"+value+"|\\b(?:tap|click|check|uncheck|enable|disable)\\s+(?:the\\s+)?"+token+"|\\b(?:dismiss|hide)\\s+(?:the\\s+)?keyboard|\\b(?:go\\s+)?back\\b|\\brelaunch\\b|\\bscroll\\s+(?:up|down|left|right)\\b|\\bwait\\s+for\\s+(?:the\\s+)?(?:exact\\s+)?text\\s+"+token, 'gi');
+  return new RegExp("\\bin\\s+"+token+"\\s+use\\s+"+value+"|\\b(?:fill|replace)\\s+"+token+"\\s+(?:with|using|=)\\s+"+value+"|\\b(?:tap|click|check|uncheck|enable|disable)\\s+(?:the\\s+)?"+token+"|\\b(?:dismiss|hide)\\s+(?:the\\s+)?keyboard|\\b(?:go\\s+)?back\\b|\\brelaunch\\b|\\bscroll\\s+(?:up|down|left|right)\\b|\\bwait\\s+for\\s+(?:the\\s+)?(?:exact\\s+)?text\\s+"+token, 'gi');
+}
+function nativeIntent(source: string): string { return source.split('\n').filter(line => !/^(Case|Expect):/i.test(line)).join('\n'); }
+function unaccountedNativeAction(text: string): boolean {
+  // The compiler may resolve targets from an observed tree, but it may not
+  // silently omit an authored action. Remove only actions we can bind exactly.
+  const remaining = nativeIntent(text).replace(nativeActionExpression(), '').replace(/"(?:\\.|[^"\\])*"/g, '');
+  return /\b(?:open|navigate|visit|delete|remove|archive|rename|create|add|submit|select|choose|search|find|launch|restart|swipe|type|enter|paste|clear|close|sign\s*in|log\s*in|authenticate|tap|click|check|uncheck|enable|disable|fill|replace|scroll|dismiss|hide|wait|relaunch)\b/i.test(remaining);
+}
+export function authoredNativeSteps(source: string): Step[] {
+  if (negatedNativeAction(source)) throw new BlockedError('Negative native action clauses are ambiguous. Describe only the actions that should run.');
+  const intent = nativeIntent(source);
+  const token = '"(?:\\\\.|[^"\\\\])*"';
+  const value = '(?:'+token+'|@[A-Za-z0-9_.-]+)';
+  const expression = nativeActionExpression();
   return [...intent.matchAll(expression)].map(match => nativeStep(match[0]
     .replace(new RegExp('^in\\s+('+token+')\\s+use\\s+('+value+')$','i'),'Fill $1 with $2')
     .replace(/^replace\b/i,'Fill').replace(/\s+using\s+/i,' with ')
@@ -103,6 +119,10 @@ function privateInputLiteral(text: string): boolean {
     if (field?.[1].toLowerCase() === 'case') {
       const withoutFixtures = body.replace(/@[A-Za-z0-9_.-]+/g, '');
       if (sensitiveInputTarget(withoutFixtures)) {
+        // A short code is still private when it follows a credential noun,
+        // even when it has no punctuation or token-like entropy.
+        const titleValue = withoutFixtures.match(/\b(?:password|passcode|pin|otp|one[- ]time(?:\s+(?:password|code))?|verification\s+code|security\s+code|access\s+token|token|secret|api.?key)\s+([A-Za-z0-9._+-]{3,})\b/i)?.[1];
+        if (titleValue && !/^(?:login|test|entry|refresh|reset|flow|validation|field|target|expectation|is|should|works|fails|expired|invalid|valid|missing|rejected|accepted)$/i.test(titleValue)) return true;
         for (const match of withoutFixtures.matchAll(/"((?:\\.|[^"\\])+)"|'((?:\\.|[^'\\])+)'|\b([A-Za-z0-9][A-Za-z0-9._+@/-]*)\b/g)) {
           const candidate = match[1] ?? match[2] ?? match[3];
           if (((match[1] !== undefined || match[2] !== undefined) && !sensitiveInputTarget(candidate)) || secretShaped(candidate)) return true;
@@ -112,6 +132,23 @@ function privateInputLiteral(text: string): boolean {
     }
   }
   const authored = text.replace(fixtureBinding, '').replace(/@[A-Za-z0-9_.-]+/g, '');
+  // A credential does not need to look random to be private. Catch the common
+  // username/password sentence shapes after removing fixture references so
+  // short values such as "letmein" never reach the planner.
+  const authToken = '[A-Za-z0-9][A-Za-z0-9._+@-]*';
+  const authLiteralPatterns = [
+    new RegExp('\\b(?:sign\\s*in|log\\s*in)\\s+as\\s+' + authToken + '\\s+(?:with|using)\\s+(' + authToken + ')', 'i'),
+    new RegExp('\\b(?:use|enter|type|provide)\\s+(' + authToken + ')\\s+to\\s+(?:sign\\s*in|log\\s*in|authenticate)\\b', 'i'),
+    new RegExp('\\bauthenticate\\s+' + authToken + '\\s*(?:/|\\||with|using)\\s*(' + authToken + ')', 'i'),
+    new RegExp('\\blogin\\s+(?!(?:is|was|should|must|can|cannot|will|remains|fails|succeeds|works|with|using|without|after|before|when)\\b)' + authToken + '\\s+(' + authToken + ')', 'i'),
+  ];
+  if (authLiteralPatterns.some(pattern => pattern.test(authored))) return true;
+  const unboundIdentityPatterns = [
+    new RegExp('\\b(?:sign\\s*in|log\\s*in)\\s+as\\s+' + authToken + '\\b', 'i'),
+    new RegExp('\\bauthenticate\\s+' + authToken + '\\b', 'i'),
+    new RegExp('^[ \\t]*Case:[ \\t]*Login[ \\t]+' + authToken + '\\b', 'im'),
+  ];
+  if (unboundIdentityPatterns.some(pattern => pattern.test(authored))) return true;
   if (/\b(?:password|passcode|pin|otp|one[- ]time(?:\s+(?:password|code))?|verification\s+code|security\s+code|credit\s+card|card\s+number|cvv|cvc|social\s+security(?:\s+number)?|ssn|token|secret|api.?key|e-?mail|user\s*name)\b"?(?:\s+field)?\s*(?:with|using|=|is|:|to|should\s+be)\s*(?!@)(?:"[^"\n]+"|[^\s,.;]+)/i.test(authored)) return true;
   if (/\b(?:for|in)\s+(?:the\s+)?"?(?:password|passcode|pin|otp|one[- ]time(?:\s+(?:password|code))?|verification\s+code|security\s+code|credit\s+card|card\s+number|cvv|cvc|social\s+security(?:\s+number)?|ssn|token|secret|api.?key|e-?mail|user\s*name)\b"?(?:\s+field)?\s*[,;:]\s*(?:enter|type|input|use|fill|replace|set|put|paste|provide)\s+(?:code\s+)?(?!@)(?:"[^"\n]+"|'[^'\n]+'|\d[\d -]{2,20}\d|[A-Za-z0-9][A-Za-z0-9._-]{2,})/i.test(authored)) return true;
   if (/\b(?:enter|type|input|use|fill|replace|set|put|paste|provide)\s+(?:code\s+)?(?!@)(?:"[^"\n]+"|'[^'\n]+'|\d[\d -]{2,20}\d|[A-Za-z0-9][A-Za-z0-9._-]{2,})\s+(?:in|into|for|as)\s+(?:the\s+)?"?(?:password|passcode|pass\s*phrase|pin|otp|one[- ]time(?:\s+(?:password|code))?|verification\s+code|security\s+code|credit\s+card|card\s+number|cvv|cvc|social\s+security(?:\s+number)?|ssn|token|secret|api.?key|e-?mail|user\s*name|login(?:\s+(?:id|name))?)\b/i.test(authored)) return true;
@@ -137,6 +174,7 @@ export async function compileNative(text: string, platform: 'ios' | 'android', m
   const valueFirstLiteral = /\b(?:enter|type|fill|replace)\s+"(?:\\.|[^"\\])+"\s+(?:in|into|for)\s+"?(?:password|passcode|pin|otp|verification\s+code|security\s+code|credit\s+card|card\s+number|cvv|cvc|social\s+security|ssn|token|secret|api.?key|e-?mail|user\s*name)\b/i.test(text);
   if (containsSecret(text, secrets) || privateInputLiteral(text) || authoredLiteral || targetFirstLiteral || valueFirstLiteral) throw new BlockedError('Use @fixture references for private inputs.');
   if (/^Auth:/im.test(text) || /captcha|biometric|face id|touch id|canvas|pixel|looks (?:good|right)/i.test(text) || unsupportedNativeMutation(text)) throw new BlockedError('This native case needs an unsupported capability. Use observed UI actions and exact expectations.');
+  if (mode === 'on' && !/^Step:/im.test(text) && unaccountedNativeAction(text)) throw new BlockedError('A freeform native action could not be bound safely. Use explicit Step lines or supported Tap/Fill/Check/Scroll/Back/Relaunch wording.');
   const baseline = parseNative(text, platform);
   if (mode === 'off' || baseline.cases.every(test => !test.blockedReason)) return baseline;
   // Explicit unsupported steps are a user contract, never a request to invent replacements.
@@ -159,5 +197,5 @@ export async function compileNative(text: string, platform: 'ios' | 'android', m
     if (test.assertions.length !== requiredAssertions.length || test.assertions.some(({afterStep, ...check},index) => JSON.stringify(check) !== JSON.stringify(requiredAssertions[index]) || afterStep !== test.steps.length - 1)) throw new BlockedError('Planner changed an expectation or its final verification milestone. Use Step lines for intermediate milestones.');
     if (/\brelaunch\b/i.test(block.source) && !test.steps.some(step => step.action === 'relaunch')) throw new BlockedError('Planner dropped persistence verification.');
   }
-  return suite;
+  return redactBlockedNativeCases(suite);
 }

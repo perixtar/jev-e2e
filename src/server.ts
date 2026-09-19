@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { readFixtures, secretValues, sanitize } from './config.js';
 import { compileCases, planHash } from './plan.js';
 import { runSuite, providerOptions, readSavedPlan, savedHash } from './runner.js';
-import { compileNative } from './mobile-plan.js';
+import { compileNative, redactBlockedNativeCases } from './mobile-plan.js';
 import { validateSuite, type Progress, type SuiteResult, type Suite, type NativeTarget } from './types.js';
 
 type Job = { id: string; controller: AbortController; events: Progress[]; subscribers: Set<ServerResponse>; done: boolean; result?: SuiteResult; plan?: Suite; target?: NativeTarget; directory: string; sourceKey: string };
@@ -94,7 +94,8 @@ export async function startUi(port = 4007, dataDirectory = '.jev-e2e') {
               sendEvent(job, { type: 'planning', message: 'Compiling cases for review.' });
               const saved = typeof input.savedPath === 'string' && input.savedPath ? await readSavedPlan(input.savedPath) : undefined;
               if (saved?.target && (!target || saved.target.app !== target.app || saved.target.platform !== target.platform)) throw new Error('Saved plan belongs to a different native app/platform.');
-              job.plan = sanitize(saved?.plan ?? (target ? await compileNative(input.casesText, target.platform, mode, fixtures, providerOptions(options), job.controller.signal, secrets) : await compileCases(input.casesText, mode, fixtures, providerOptions(options), job.controller.signal, secrets)), secrets);
+              const compiled = saved?.plan ?? (target ? await compileNative(input.casesText, target.platform, mode, fixtures, providerOptions(options), job.controller.signal, secrets) : await compileCases(input.casesText, mode, fixtures, providerOptions(options), job.controller.signal, secrets));
+              job.plan = sanitize(target ? redactBlockedNativeCases(compiled) : compiled, secrets);
             } else {
               const replay = typeof input.savedPath === 'string' && input.savedPath ? await readSavedPlan(input.savedPath) : undefined;
               if (replay && planHash(replay.plan) !== planHash(validateSuite(plan))) throw new Error('The saved specification changed. Review it again.');
@@ -107,7 +108,11 @@ export async function startUi(port = 4007, dataDirectory = '.jev-e2e') {
       const filename = path === '/' ? 'index.html' : path.slice(1); const content = assets.get(filename);
       if (request.method !== 'GET' || !content) { json({ error: 'Not found.' }, 404); return; }
       response.setHeader('Content-Type', filename.endsWith('.html') ? 'text/html' : filename.endsWith('.css') ? 'text/css' : filename.endsWith('.ico') ? 'image/svg+xml' : 'text/javascript'); response.end(content);
-    } catch { if (!response.headersSent) json({ error: 'Invalid request or local file configuration.' }, 400); else response.end(); }
+    } catch (error) {
+      if (response.headersSent) { response.end(); return; }
+      const missingNativeSdk = request.url?.startsWith('/api/devices?') && error instanceof Error && error.message.includes('Install agent-device@0.21.6');
+      json({ error: missingNativeSdk ? 'Native device support is unavailable. Install agent-device@0.21.6, then try List devices again.' : 'Invalid request or local file configuration.' }, 400);
+    }
   });
   server.requestTimeout = 10000; server.headersTimeout = 10000;
   await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(port, '127.0.0.1', () => { server.removeListener('error', reject); resolve(); }); });

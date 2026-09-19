@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { z } from 'zod';
 import { providerOptions, savedHash, FlowSchema, type RunOptions } from './runner.js';
-import { compileNative } from './mobile-plan.js';
+import { compileNative, redactBlockedNativeCases } from './mobile-plan.js';
 import { splitCases } from './plan.js';
 import { MobileDriver, nativeVersions } from './mobile.js';
 import { decide } from './providers.js';
@@ -37,11 +37,12 @@ export async function runMobileSuite(options: RunOptions): Promise<SuiteResult> 
   try {
     plan = await timed('planning', async () => saved ? validateSuite(saved.plan) : options.plan ? validateSuite(options.plan) : compileNative(options.casesText ?? '', platform, options.planner ?? 'on', fixtures, provider, planningSignal, secrets));
     if (plan.version !== 2 || plan.platform !== platform || containsSecret(plan, secrets)) throw new BlockedError('Mobile plan platform mismatch or secret literal.');
+    plan = redactBlockedNativeCases(plan);
     planningSignal.throwIfAborted();
   } catch (e) {
     const reason = signal.aborted ? 'Run canceled.' : planningSignal.aborted ? 'Planning deadline reached.' : e instanceof BlockedError ? e.message : 'Could not compile a reliable mobile contract.';
     let blocks; try { blocks = splitCases(options.casesText ?? ''); } catch { blocks = [{ name: 'Invalid suite', source: '' }]; }
-    if (reason === 'Use @fixture references for private inputs.') blocks = blocks.map((_, index) => ({ name: `Blocked private case ${index + 1}`, source: '[PRIVATE INPUT REDACTED]' }));
+    blocks = blocks.map((_, index) => ({ name: `Blocked mobile case ${index + 1}`, source: '[PRIVATE INPUT REDACTED]' }));
     plan = { version: 2, platform, cases: blocks.map(block => ({ ...block, goal: block.name, auth: null, steps: [], assertions: [], blockedReason: reason })) };
   }
   if (directory) { await mkdir(directory, { recursive: true, mode: 0o700 }); await chmod(directory, 0o700); }
