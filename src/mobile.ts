@@ -72,9 +72,7 @@ export function normalizeNative(raw: NativeSnapshot, app: string, secrets: strin
     const capabilities: Step['action'][] = role === 'textbox' ? ['fill'] : role === 'checkbox' ? ['check', 'uncheck'] : ['button', 'link'].includes(role) ? ['click'] : [];
     if (!label || !capabilities.length) continue;
     const id = `n${node.index}`;
-    // Accessibility decoration can appear a moment after an iOS relaunch.
-    // Symbol-only ancestors do not distinguish entities; named ancestors do.
-    const context = redact(ancestors(node, raw.nodes).reverse().map(parent => parent.label || parent.identifier || '').filter(value => value && value !== rawLabel && /[\p{L}\p{N}]/u.test(value)).join(' / '), secrets).slice(-600);
+    const context = redact(ancestors(node, raw.nodes).reverse().map(parent => parent.label || parent.identifier || '').filter(value => value && value !== rawLabel).join(' / '), secrets).slice(-600);
     const type = redact(node.password || /secure/i.test(node.type ?? '') ? 'password' : node.type ?? '', secrets).slice(0, 40);
     const identifier = node.identifier ? redact(node.identifier, secrets).slice(0, 300) : undefined;
     const control: Control = { id, tag: 'native', role, label, context, type, disabled: node.enabled === false, checked: selected(node), options: [], capabilities, ...(identifier ? { identifier } : {}),
