@@ -41,6 +41,7 @@ export async function runMobileSuite(options: RunOptions): Promise<SuiteResult> 
   } catch (e) {
     const reason = signal.aborted ? 'Run canceled.' : planningSignal.aborted ? 'Planning deadline reached.' : e instanceof BlockedError ? e.message : 'Could not compile a reliable mobile contract.';
     let blocks; try { blocks = splitCases(options.casesText ?? ''); } catch { blocks = [{ name: 'Invalid suite', source: '' }]; }
+    if (reason === 'Use @fixture references for private inputs.') blocks = blocks.map((_, index) => ({ name: `Blocked private case ${index + 1}`, source: '[PRIVATE INPUT REDACTED]' }));
     plan = { version: 2, platform, cases: blocks.map(block => ({ ...block, goal: block.name, auth: null, steps: [], assertions: [], blockedReason: reason })) };
   }
   if (directory) { await mkdir(directory, { recursive: true, mode: 0o700 }); await chmod(directory, 0o700); }
@@ -55,7 +56,7 @@ export async function runMobileSuite(options: RunOptions): Promise<SuiteResult> 
     try {
       caseSignal.throwIfAborted();
       if (test.blockedReason) throw new BlockedError(test.blockedReason);
-      const values = test.steps.map(step => { if (!step.fixture) return step.value; const value = fixtures.inputs[step.fixture]?.value; if (value === undefined) throw new BlockedError(`Missing input fixture: ${step.fixture}.`); return value; });
+      const values = test.steps.map(step => { if (!step.fixture) return step.value; const value = Object.hasOwn(fixtures.inputs, step.fixture) ? fixtures.inputs[step.fixture]?.value : undefined; if (value === undefined) throw new BlockedError(`Missing input fixture: ${step.fixture}.`); return value; });
       await options.beforeCase?.(i); caseSignal.throwIfAborted();
       await timed('setup', () => driver.open(caseSignal));
       target.device = driver.target.device; versions = await timed('setup', () => nativeVersions({ ...target, app: driver.resolvedApp }, caseSignal));
@@ -78,8 +79,10 @@ export async function runMobileSuite(options: RunOptions): Promise<SuiteResult> 
           if (result.actions.length >= maxActions || attempts++ >= 10) throw new BlockedError('Action/navigation limit reached before the required mobile flow completed.');
           progress({ type: 'step', message: `${step.action === 'click' ? 'tap' : step.action} ${step.target ?? 'app'}`, caseName: test.name, step: stepIndex + 1 });
           if (['relaunch', 'back', 'keyboard', 'scroll', 'wait'].includes(step.action)) {
-            result.actions.push({ step: stepIndex, action: step.action, target: step.target ?? 'app', replay: Boolean(saved) });
-            await timed('action', () => driver.direct(step, caseSignal)); result.flow.push({ step: stepIndex, navigation: false, control: null }); complete = true; continue;
+            let dispatched = false; const action = { step: stepIndex, action: step.action, target: step.target ?? 'app', replay: Boolean(saved) };
+            try { await timed('action', () => driver.direct(step, caseSignal, () => { dispatched = true; })); result.actions.push({ ...action, outcome: 'confirmed' }); }
+            catch (error) { if (dispatched) result.actions.push({ ...action, outcome: 'uncertain' }); throw error; }
+            result.flow.push({ step: stepIndex, navigation: false, control: null }); complete = true; continue;
           }
           const observation = await timed('observation', () => driver.observe(caseSignal));
           let control: Control | undefined, navigation = false, replay = false;
@@ -105,8 +108,9 @@ export async function runMobileSuite(options: RunOptions): Promise<SuiteResult> 
           // Once a private value has been entered, later captures must never
           // include it. A recording intentionally excludes all credential steps.
           const action = navigation ? { action: 'click' as const, target: control.label, value: null, fixture: null } : step;
-          result.actions.push({ step: stepIndex, action: action.action, target: control.label, replay });
-          await timed('action', () => driver.execute(observation, control!, action, navigation ? null : values[stepIndex], caseSignal));
+          const record = { step: stepIndex, action: action.action, target: control.label, replay }; let dispatched = false;
+          try { await timed('action', () => driver.execute(observation, control!, action, navigation ? null : values[stepIndex], caseSignal, () => { dispatched = true; })); result.actions.push({ ...record, outcome: 'confirmed' }); }
+          catch (error) { if (dispatched) result.actions.push({ ...record, outcome: 'uncertain' }); throw error; }
           result.flow.push({ step: stepIndex, navigation, control: semantic(control) }); complete = !navigation;
         }
         for (const assertion of test.assertions.filter(check => check.afterStep === stepIndex)) {
@@ -147,6 +151,13 @@ export async function runMobileSuite(options: RunOptions): Promise<SuiteResult> 
     }
   }
   const result: SuiteResult = sanitize({ version: 2, id, startedAt: new Date(start).toISOString(), url: `app://${versions.app ?? target.app}`, target, versions, timings, verdict: signal.aborted || results.some(test => test.verdict === 'BLOCKED') ? 'BLOCKED' : results.every(test => test.verdict === 'PASS') ? 'PASS' : 'FAIL', canceled: signal.aborted, cases: results, durationMs: Date.now() - start, model: provider.stats, plan, reportDirectory: directory }, secrets);
-  if (directory) await writeReport(result, directory);
+  if (directory) {
+    // Measure one complete serialization + disk-write pass, then refresh the
+    // published files with those final values. The refresh is bookkeeping
+    // overhead; the reported run includes the same full report work once.
+    const reportStart = Date.now(); await writeReport(result, directory); const reportEnd = Date.now();
+    timings.artifact += Math.max(1, reportEnd - reportStart); result.timings = sanitize({ ...timings }, secrets); result.durationMs = reportEnd - start;
+    await writeReport(result, directory);
+  }
   return result;
 }

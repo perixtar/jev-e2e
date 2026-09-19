@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { loadEnvFile } from 'node:process';
 import { resolve, dirname } from 'node:path';
-import { BlockedError, type Fixtures } from './types.js';
+import { BlockedError, safeFixtureName, type Fixtures } from './types.js';
 
 export function loadEnvironment(path = resolve('.env')): void {
   if (existsSync(path)) loadEnvFile(path);
@@ -13,6 +13,7 @@ export function readFixtures(path?: string, env: NodeJS.ProcessEnv = process.env
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new BlockedError('Fixtures must be a JSON object.');
   const result: Fixtures = { inputs: {}, auth: {} };
   for (const [name, value] of Object.entries(raw.inputs ?? {})) {
+    if (!safeFixtureName(name)) throw new BlockedError(`Fixture name ${name} is reserved.`);
     if (!value || typeof value !== 'object' || Array.isArray(value)) throw new BlockedError(`Invalid input fixture ${name}.`);
     const item = value as Record<string, unknown>;
     if ((typeof item.env === 'string') === (typeof item.value === 'string')) throw new BlockedError(`Fixture ${name} needs either env or value.`);
@@ -20,6 +21,7 @@ export function readFixtures(path?: string, env: NodeJS.ProcessEnv = process.env
     else result.inputs[name] = { value: item.value as string };
   }
   for (const [name, value] of Object.entries(raw.auth ?? {})) {
+    if (!safeFixtureName(name)) throw new BlockedError(`Fixture name ${name} is reserved.`);
     const state = (value as { storageState?: unknown })?.storageState;
     if (typeof state !== 'string') throw new BlockedError(`Auth fixture ${name} needs storageState.`);
     result.auth[name] = { storageState: resolve(dirname(location), state) };

@@ -6,9 +6,15 @@ import { BlockedError, validateSuite, sensitiveInputTarget, unsupportedNativeMut
 const quote = (text: string) => { try { return JSON.parse(`"${text}"`) as string; } catch { throw new BlockedError('Use JSON-style double-quoted names and values.'); } };
 const empty = (action: Step['action'], target: string | null = null): Step => ({ action, target, value: null, fixture: null });
 function negatedNativeAction(text: string): boolean {
-  const action = '(?:tap(?:ping)?|click(?:ing)?|fill(?:ing)?|replac(?:e|ing)|check(?:ing)?|uncheck(?:ing)?|enabl(?:e|ing)|disabl(?:e|ing)|relaunch(?:ing)?|restart(?:ing)?|scroll(?:ing)?|go(?:ing)?\\s+back|dismiss(?:ing)?|hid(?:e|ing)|wait(?:ing)?)';
-  return new RegExp('(?:\\bnever\\b|\\bnot(?:\\s+to)?\\b|\\bcannot\\b|\\b[A-Za-z]+n[’\']t\\b|\\bwithout\\b)[^.!?;\\n]{0,120}\\b' + action + '\\b', 'i').test(text)
-    || new RegExp('\\b(?:avoid|skip|except(?:\\s+for)?|refrain\\s+from|instead\\s+of|rather\\s+than)\\s+(?:to\\s+)?' + action + '\\b', 'i').test(text);
+  const actions = /\b(?:tap(?:ping)?|click(?:ing)?|fill(?:ing)?|replac(?:e|ing)|check(?:ing)?|uncheck(?:ing)?|enabl(?:e|ing)|disabl(?:e|ing)|relaunch(?:ing)?|restart(?:ing)?|scroll(?:ing)?|go(?:ing)?\s+back|dismiss(?:ing)?|hid(?:e|ing)|wait(?:ing)?)\b/gi;
+  const exclusion = /\b(?:never|not|cannot|without|avoid|skip|except|refrain|instead|rather|but|other\s+than|under\s+no\s+circumstances|no\s+circumstances|forbid(?:den)?|prohibit(?:ed)?|[A-Za-z]+n[’']t)\b/i;
+  for (const match of text.matchAll(actions)) {
+    const start = Math.max(text.lastIndexOf('\n', match.index), text.lastIndexOf(';', match.index), text.lastIndexOf('.', match.index), text.lastIndexOf('!', match.index), text.lastIndexOf('?', match.index)) + 1;
+    const tail = text.slice(match.index!); const offset = tail.search(/[\n;.!?]/); const end = offset < 0 ? text.length : match.index! + offset;
+    const clause = text.slice(start, end).replace(/"(?:\\.|[^"\\])*"/g, '""');
+    if (exclusion.test(clause)) return true;
+  }
+  return false;
 }
 export function nativeStep(text: string): Step {
   if (/^(relaunch|back|dismiss keyboard)$/i.test(text)) return empty(/^dismiss/i.test(text) ? 'keyboard' : text.toLowerCase() as Step['action']);
@@ -77,7 +83,7 @@ function privateInputLiteral(text: string): boolean {
   if (/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i.test(text) || /\b\d{3}-\d{2}-\d{4}\b/.test(text)) return true;
   const token = '"(?:\\\\.|[^"\\\\])*"';
   const fixtureBinding = new RegExp('\\bin\\s+' + token + '\\s+use\\s+@[A-Za-z0-9_.-]+|\\b(?:fill|replace)\\s+' + token + '\\s+(?:with|using|=)\\s+@[A-Za-z0-9_.-]+', 'gi');
-  const secretShaped = (value: string) => /^\d{4,12}$/.test(value) || (/^\S{6,}$/.test(value) && /[-_!#$%^&*+=]/.test(value)) || /^[A-Za-z0-9+/]{20,}={0,2}$/.test(value) || /^(?:sk|pk|api|token)[-_]/i.test(value);
+  const secretShaped = (value: string) => /^\d{4,12}$/.test(value) || (/^\S{6,}$/.test(value) && /[-_!#$%^&*+=]/.test(value)) || /^(?=[A-Za-z0-9]{8,}$)(?=.*[A-Za-z])(?=.*\d)[A-Za-z0-9]+$/.test(value) || /^[A-Za-z0-9+/]{20,}={0,2}$/.test(value) || /^(?:sk|pk|api|token)[-_]/i.test(value);
   for (const line of text.split('\n')) {
     const field = line.match(/^\s*(Case|Goal|Step|Expect):\s*(.*)$/i);
     const body = field?.[2] ?? line;
@@ -96,12 +102,12 @@ function privateInputLiteral(text: string): boolean {
       } catch { /* Unknown Step syntax is handled later, but must still be scanned. */ }
     }
     if (field?.[1].toLowerCase() === 'case') {
-      const privateName = '(?:password|passcode|pass\\s*phrase|pin|otp|one[- ]time(?:\\s+(?:password|code))?|verification\\s+code|security\\s+code|credit\\s+card|card\\s+number|cvv|cvc|social\\s+security(?:\\s+number)?|ssn|token|secret|api.?key|e-?mail|user\\s*name)';
-      const supplied = body.match(new RegExp('\\b' + privateName + '\\b\\s*(?:field\\b\\s*)?(?:(?:is|=|:|value\\s+is)\\s*)?("(?:\\\\.|[^"\\\\])+"|\'(?:\\\\.|[^\'\\\\])+\'|[^\\s,.;]+)', 'i'));
-      if (supplied) {
-        const candidate = supplied[1].replace(/^["']|["']$/g, '');
-        const benign = /^(?:test|testing|flow|reset|screen|field|input|validation|verification|rejected|accepted|behavior|case|works|error|policy|expectation)$/i.test(candidate);
-        if (!candidate.startsWith('@') && (!benign || secretShaped(candidate))) return true;
+      const withoutFixtures = body.replace(/@[A-Za-z0-9_.-]+/g, '');
+      if (sensitiveInputTarget(withoutFixtures)) {
+        for (const match of withoutFixtures.matchAll(/"((?:\\.|[^"\\])+)"|'((?:\\.|[^'\\])+)'|\b([A-Za-z0-9][A-Za-z0-9._+@/-]*)\b/g)) {
+          const candidate = match[1] ?? match[2] ?? match[3];
+          if (((match[1] !== undefined || match[2] !== undefined) && !sensitiveInputTarget(candidate)) || secretShaped(candidate)) return true;
+        }
       }
       continue;
     }

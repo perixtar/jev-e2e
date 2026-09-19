@@ -23,6 +23,16 @@ const selected = (node: Node): boolean | null => {
   return /^(1|true|on|checked)$/i.test(node.value ?? '') ? true : /^(0|false|off|unchecked)$/i.test(node.value ?? '') ? false : null;
 };
 const visible = (node: Node) => node.visibleToUser !== false && node.hittable !== false && !node.interactionBlocked && Boolean(node.rect && node.rect.width > 0 && node.rect.height > 0);
+const isSystemSurface = (raw: NativeSnapshot) => raw.systemSurfaceOnly === true || raw.androidSnapshot?.systemSurfaceOnly === true || typeof raw.iosSystemSurfaceBundleId === 'string' && raw.iosSystemSurfaceBundleId.length > 0;
+function assertSnapshotOwnership(raw: NativeSnapshot, app: string, device?: string): void {
+  if (isSystemSurface(raw)) throw new BlockedError('The observed native surface belongs to the operating system. System dialogs and overlays are unsupported.');
+  const actualApp = raw.appBundleId ?? raw.identifiers?.appBundleId ?? raw.identifiers?.appId ?? raw.identifiers?.package;
+  if (!actualApp || actualApp !== app) throw new BlockedError('The observed app does not match --app. External apps and system dialogs need explicit handling.');
+  if (device) {
+    const actualDevice = raw.identifiers?.deviceId ?? raw.identifiers?.udid ?? raw.identifiers?.serial;
+    if (actualDevice !== device) throw new BlockedError('The observed native snapshot does not match the selected device.');
+  }
+}
 async function removeLocalArtifact(path: string): Promise<void> {
   try { await unlink(path); }
   catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw new BlockedError('Could not clear the requested local artifact path before capture.'); }
@@ -36,20 +46,23 @@ function ancestors(node: Node, nodes: Node[]): Node[] {
   }
   return result;
 }
-export function normalizeNative(raw: NativeSnapshot, app: string, secrets: string[]): NativeObservation {
-  const actual = raw.appBundleId ?? raw.identifiers?.appBundleId ?? raw.identifiers?.appId;
-  if (!actual || actual !== app) throw new BlockedError('The observed app does not match --app. External apps and system dialogs need explicit handling.');
+export function normalizeNative(raw: NativeSnapshot, app: string, secrets: string[], device?: string): NativeObservation {
+  assertSnapshotOwnership(raw, app, device);
   if (!raw.nodes?.length || !['healthy', 'recovered'].includes(raw.snapshotQuality?.state ?? '')) throw new BlockedError('Native accessibility evidence is empty or unhealthy.');
   const nodes = new Map<string, Node>(), controls: Control[] = [];
   for (const node of raw.nodes) {
     if (!visible(node)) continue;
-    const role = normalizedRole(node), label = node.label ?? (node.inheritsLabel ? ancestors(node, raw.nodes).find(parent => parent.label)?.label : undefined) ?? node.identifier ?? '';
+    const role = normalizedRole(node);
+    const rawLabel = node.label ?? (node.inheritsLabel ? ancestors(node, raw.nodes).find(parent => parent.label)?.label : undefined) ?? node.identifier ?? '';
+    const label = redact(rawLabel, secrets).slice(0, 240);
     const capabilities: Step['action'][] = role === 'textbox' ? ['fill'] : role === 'checkbox' ? ['check', 'uncheck'] : ['button', 'link'].includes(role) ? ['click'] : [];
     if (!label || !capabilities.length) continue;
-    const id = `n${node.index}`, context = ancestors(node, raw.nodes).reverse().map(parent => parent.label || parent.identifier || '').filter(value => value && value !== label).join(' / ').slice(-600);
-    const control: Control = { id, tag: 'native', role, label: redact(label, secrets), context: redact(context, secrets), type: node.password || /secure/i.test(node.type ?? '') ? 'password' : node.type ?? '', disabled: node.enabled === false, checked: selected(node), options: [], capabilities, identifier: node.identifier,
-      fingerprint: JSON.stringify({ role, label, context, identifier: node.identifier }) };
-    if (control.identifier) control.identifier = redact(control.identifier, secrets);
+    const id = `n${node.index}`;
+    const context = redact(ancestors(node, raw.nodes).reverse().map(parent => parent.label || parent.identifier || '').filter(value => value && value !== rawLabel).join(' / '), secrets).slice(-600);
+    const type = redact(node.password || /secure/i.test(node.type ?? '') ? 'password' : node.type ?? '', secrets).slice(0, 40);
+    const identifier = node.identifier ? redact(node.identifier, secrets).slice(0, 300) : undefined;
+    const control: Control = { id, tag: 'native', role, label, context, type, disabled: node.enabled === false, checked: selected(node), options: [], capabilities, ...(identifier ? { identifier } : {}),
+      fingerprint: JSON.stringify({ role, label, context, identifier }) };
     controls.push(control); nodes.set(id, node);
   }
   const text = raw.nodes.filter(node => visible(node) && normalizedRole(node) !== 'textbox').map(node => node.label ?? '').filter(Boolean).join('\n');
@@ -122,7 +135,8 @@ export class MobileDriver {
       if (extension !== expected) throw new BlockedError(`${this.target.platform} build paths must end in ${expected}.`);
       const installed = await this.connection.call('install', { ...this.selection, appPath }, signal, 60000);
       const identity = installed.bundleId ?? installed.package ?? installed.appId;
-      if (!identity) throw new BlockedError('Installed build did not expose an app identity.');
+      const installedDevice = installed.identifiers?.deviceId ?? installed.identifiers?.udid ?? installed.identifiers?.serial;
+      if (!identity || installedDevice !== this.target.device) throw new BlockedError('Installed build did not expose the selected device and app identity.');
       this.appIdentity = identity;
     } else if (pathLike) throw new BlockedError('Native build path does not exist. Pass an existing .app/.apk path or an installed app ID.');
     this.opened = true;
@@ -143,13 +157,13 @@ export class MobileDriver {
           // known secret. It must never become a shareable report artifact.
           await this.finishRecording(signal, false);
         }
-        return normalizeNative(raw, this.appIdentity, this.secrets);
+        return normalizeNative(raw, this.appIdentity, this.secrets, this.target.device);
       }
       await delay(100, undefined, { signal });
     } while (Date.now() < end);
     throw new BlockedError('App accessibility content did not become ready within five seconds.');
   }
-  async execute(observation: NativeObservation, control: Control, step: Step, value: string | null, signal: AbortSignal): Promise<void> {
+  async execute(observation: NativeObservation, control: Control, step: Step, value: string | null, signal: AbortSignal, onDispatch: () => void = () => {}): Promise<void> {
     // Refresh before dispatch, then pin the ref frame. A changed semantic target
     // or modal context is a block; it must never become an automatic mutation retry.
     const fresh = await this.observe(signal);
@@ -165,7 +179,7 @@ export class MobileDriver {
         if (!node.identifier) throw new BlockedError('Replacing Android text requires a stable control ID.');
         // Clearing a controlled Android field can replace its InputConnection.
         // Verify clear and focus before typing once into the new connection.
-        const cleared = await this.connection.call('fill', { ...options, text: '' }, signal, 20000);
+        onDispatch(); const cleared = await this.connection.call('fill', { ...options, text: '' }, signal, 20000);
         if (cleared.verification === 'unconfirmed') throw new BlockedError('Android clear was unconfirmed. It was not repeated.');
         const empty = await this.observe(signal), inputs = empty.controls.filter(item => item.identifier === node.identifier && item.role === 'textbox');
         if (inputs.length !== 1) throw new BlockedError('Android input changed after clearing.');
@@ -178,31 +192,34 @@ export class MobileDriver {
       }
       // Pace the initial synthesis, as recommended by the pinned iOS backend.
       // This is a single dispatch; an uncertain fill is never retried.
-      const filled = await this.connection.call('fill', { ...options, text: value, ...(this.target.platform === 'ios' ? { delayMs: 80 } : {}) }, signal, 20000);
+      onDispatch(); const filled = await this.connection.call('fill', { ...options, text: value, ...(this.target.platform === 'ios' ? { delayMs: 80 } : {}) }, signal, 20000);
       if (filled.verification === 'unconfirmed') throw new BlockedError('Native fill could not confirm the requested text. It was not repeated.');
     } else if (step.action === 'check' || step.action === 'uncheck') {
       if (current.checked === null) throw new BlockedError('Native switch state is unavailable.');
       const expected = step.action === 'check';
       if (current.checked !== expected) {
-        await this.connection.call('press', options, signal, 10000);
+        onDispatch(); await this.connection.call('press', options, signal, 10000);
         const verified = await this.check({ kind: 'checked', target: { by: node.identifier ? 'id' : 'label', text: node.identifier ?? current.label, role: null, within: null }, expected }, signal);
         if (!verified.passed) throw new BlockedError('Native switch change was not confirmed. It was not repeated.');
       }
-    } else if (step.action === 'click') await this.connection.call('press', options, signal, 10000);
+    } else if (step.action === 'click') { onDispatch(); await this.connection.call('press', options, signal, 10000); }
     else throw new BlockedError('Incompatible native control action.');
     signal.throwIfAborted();
   }
-  async direct(step: Step, signal: AbortSignal): Promise<void> {
-    if (step.action === 'relaunch') await this.connection.call('open', { ...this.selection, app: this.appIdentity, relaunch: true }, signal, 15000);
-    else if (step.action === 'back') await this.connection.call('back', { settle: true, settleQuietMs: 100, timeoutMs: 1500 }, signal, 10000);
+  async direct(step: Step, signal: AbortSignal, onDispatch: () => void = () => {}): Promise<void> {
+    if (step.action === 'relaunch') {
+      onDispatch(); const opened = await this.connection.call('open', { ...this.selection, app: this.appIdentity, relaunch: true }, signal, 15000);
+      if (opened.device?.id !== this.target.device || opened.appBundleId !== this.appIdentity) throw new BlockedError('Native relaunch selected a different app/device.');
+    }
+    else if (step.action === 'back') { await this.observe(signal); onDispatch(); await this.connection.call('back', { settle: true, settleQuietMs: 100, timeoutMs: 1500 }, signal, 10000); }
     else if (step.action === 'keyboard') {
       const observation = await this.observe(signal);
       const buttons = observation.controls.filter(control => control.capabilities?.includes('click') && /^(dismiss|hide) keyboard$/i.test(control.label));
       if (buttons.length > 1) throw new BlockedError('Keyboard dismissal control is ambiguous.');
-      if (buttons.length === 1) await this.execute(observation, buttons[0], { action: 'click', target: buttons[0].label, value: null, fixture: null }, null, signal);
-      else await this.connection.call('keyboard', { action: 'dismiss' }, signal, 10000);
+      if (buttons.length === 1) await this.execute(observation, buttons[0], { action: 'click', target: buttons[0].label, value: null, fixture: null }, null, signal, onDispatch);
+      else { onDispatch(); await this.connection.call('keyboard', { action: 'dismiss' }, signal, 10000); }
     }
-    else if (step.action === 'scroll') await this.connection.call('scroll', { direction: step.target, amount: 1, settle: true, settleQuietMs: 100, timeoutMs: 1500 }, signal, 10000);
+    else if (step.action === 'scroll') { await this.observe(signal); onDispatch(); await this.connection.call('scroll', { direction: step.target, amount: 1, settle: true, settleQuietMs: 100, timeoutMs: 1500 }, signal, 10000); }
     else if (step.action === 'wait') {
       const check: Assertion = { kind: 'visible', target: { by: 'text', text: step.target!, role: null, within: null }, expected: true };
       const result = await this.check(check, signal, 5000); if (!result.passed) throw new BlockedError('Required wait target did not appear.');
@@ -230,8 +247,7 @@ export class MobileDriver {
     try {
       const result = await this.connection.call('record', { action: 'start', path: expected, quality: 'medium', hideTouches: true }, signal, 15000);
       const returned = typeof result?.outPath === 'string' ? resolve(result.outPath) : null;
-      const child = returned ? relative(dirname(expected), returned) : null;
-      if (returned && extname(returned).toLowerCase() === '.mp4' && child !== null && !isAbsolute(child) && child !== '..' && !child.startsWith(`..${sep}`)) this.recordingArtifacts.add(returned);
+      if (returned && extname(returned).toLowerCase() === '.mp4' && this.trackOwnedRecordingPath(returned, expected)) this.recordingArtifacts.add(returned);
       if (result?.recording !== 'started' || returned !== expected || result.showTouches !== false || result.recordingScope !== 'app' || result.activeSessionApp?.bundleId !== this.appIdentity) {
         this.recordingDiscardedReason = 'Recording start returned unsafe or mismatched scope/path evidence. Owned artifacts are discarded when the native session closes.';
         throw new BlockedError('Native recorder did not confirm the requested app-scoped, touch-hidden output.');
@@ -244,7 +260,7 @@ export class MobileDriver {
     let safe = false;
     try {
       const raw = await this.rawSnapshot(signal);
-      safe = raw.appBundleId === this.appIdentity && raw.nodes?.length > 0 && ['healthy', 'recovered'].includes(raw.snapshotQuality?.state ?? '') && this.captureAllowed(raw);
+      safe = raw.nodes?.length > 0 && ['healthy', 'recovered'].includes(raw.snapshotQuality?.state ?? '') && this.captureAllowed(raw);
     } catch { /* Missing final evidence must discard pixels, never publish them. */ }
     return this.finishRecording(signal, safe);
   }
@@ -253,8 +269,16 @@ export class MobileDriver {
     const path = this.recordingPath;
     const returned = typeof result?.outPath === 'string' ? resolve(result.outPath) : null;
     const expected = path ? resolve(path) : null;
-    const withinOwnedDirectory = expected && returned ? (() => { const child = relative(dirname(expected), returned); return extname(returned).toLowerCase() === '.mp4' && !isAbsolute(child) && child !== '..' && !child.startsWith(`..${sep}`); })() : false;
-    if (withinOwnedDirectory && returned) this.recordingArtifacts.add(returned);
+    const withinOwnedDirectory = Boolean(expected && returned && extname(returned).toLowerCase() === '.mp4' && this.trackOwnedRecordingPath(returned, expected));
+    if (expected) {
+      this.trackOwnedRecordingPath(result?.telemetryPath, expected);
+      for (const artifact of Array.isArray(result?.artifacts) ? result.artifacts : []) {
+        if (!['screen-recording', 'screen-recording-chunk', 'screen-recording-telemetry'].includes(artifact?.artifactType ?? '')) continue;
+        this.trackOwnedRecordingPath(artifact?.localPath, expected);
+        this.trackOwnedRecordingPath(artifact?.path, expected);
+      }
+      for (const chunk of Array.isArray(result?.chunks) ? result.chunks : []) this.trackOwnedRecordingPath(chunk?.path, expected);
+    }
     if (result?.recording !== 'stopped' || !expected || returned !== expected) {
       this.recordingDiscardedReason = returned && !withinOwnedDirectory ? 'Recorder returned a path outside the approved recording directory. It was not published or deleted automatically.' : 'Recorder returned an invalid artifact identity. Owned recording files were discarded.';
       await this.discardOwnedRecordings();
@@ -280,6 +304,12 @@ export class MobileDriver {
       throw new BlockedError('Native recorder did not produce a fresh usable artifact.');
     }
     await chmod(expected, 0o600);
+    try { await this.discardOwnedRecordings(expected); }
+    catch {
+      this.recordingDiscardedReason = 'Auxiliary recorder artifacts could not be removed safely. The recording was not published.';
+      await this.discardOwnedRecordings();
+      throw new BlockedError('Native recorder auxiliary artifact cleanup failed. The clip was discarded.');
+    }
     this.recordingMetrics = { durationMs: result.durationMs, ...(result.capturedDurationMs === undefined ? {} : {capturedDurationMs:result.capturedDurationMs}), ...(result.recordingBackend ? {backend:result.recordingBackend} : {}), ...(result.recorder === 'confirmed' ? {recorder:result.recorder} : {}), ...(['retirable','retired'].includes(result.nativePathDisposition) ? {nativePathDisposition:result.nativePathDisposition as 'retirable' | 'retired'} : {}) };
     this.recording = false; this.recordingArtifacts.clear();
     return expected;
@@ -290,7 +320,7 @@ export class MobileDriver {
     const expected = resolve(path); await mkdir(dirname(expected), { recursive: true, mode: 0o700 }); await removeLocalArtifact(expected);
     const observation = await this.observe(signal);
     if (!this.captureAllowed(observation.native)) return false;
-    const result = await this.connection.call('screenshot', { path: expected, normalizeStatusBar: true }, signal, 10000);
+    const result = await this.connection.call('screenshot', { path: expected, normalizeStatusBar: true, surface: 'app' }, signal, 10000);
     const returned = typeof result?.path === 'string' ? resolve(result.path) : null;
     const returnedChild = returned ? relative(dirname(expected), returned) : null;
     const returnedIsOwned = Boolean(returned && extname(returned).toLowerCase() === '.png' && returnedChild !== null && !isAbsolute(returnedChild) && returnedChild !== '..' && !returnedChild.startsWith(`..${sep}`));
@@ -308,7 +338,7 @@ export class MobileDriver {
     let finalState: NativeSnapshot;
     try { finalState = await this.rawSnapshot(signal); }
     catch { await discard(); throw new BlockedError('Native screenshot ownership could not be confirmed after capture. The artifact was discarded.'); }
-    if ((finalState.appBundleId ?? finalState.identifiers?.appBundleId ?? finalState.identifiers?.appId) !== this.appIdentity || !finalState.nodes?.length || !['healthy', 'recovered'].includes(finalState.snapshotQuality?.state ?? '') || !this.captureAllowed(finalState)) {
+    if (!finalState.nodes?.length || !['healthy', 'recovered'].includes(finalState.snapshotQuality?.state ?? '') || !this.captureAllowed(finalState)) {
       await discard();
       throw new BlockedError('Native screenshot ended on an unsafe or mismatched app screen. The artifact was discarded.');
     }
@@ -319,19 +349,35 @@ export class MobileDriver {
   interrupt() { this.connection.interrupt(); }
   get interrupted(): boolean { return this.connection.interrupted; }
   captureAllowed(raw: NativeSnapshot): boolean {
-    return !raw.nodes.some(node => normalizedRole(node) === 'textbox' || node.password || this.secrets.some(secret => secret && `${node.label ?? ''} ${node.value ?? ''} ${node.identifier ?? ''}`.includes(secret)));
+    return !isSystemSurface(raw) && !raw.nodes.some(node => normalizedRole(node) === 'textbox' || node.password || this.secrets.some(secret => secret && `${node.label ?? ''} ${node.value ?? ''} ${node.identifier ?? ''}`.includes(secret)));
   }
   private async rawSnapshot(signal: AbortSignal): Promise<NativeSnapshot> {
     let raw = await this.connection.call<NativeSnapshot>('snapshot', { forceFull: true, timeoutMs: 15000 }, signal, 20000);
+    assertSnapshotOwnership(raw, this.appIdentity, this.target.device);
     if (this.target.platform === 'android' && raw.appBundleId === this.appIdentity) raw = await readAndroidChecked(raw, this.target.device, this.appIdentity, signal);
+    assertSnapshotOwnership(raw, this.appIdentity, this.target.device);
     return raw;
   }
   get resolvedApp(): string { return this.appIdentity; }
-  private async discardOwnedRecordings(): Promise<void> {
+  private trackOwnedRecordingPath(candidate: unknown, expected: string): boolean {
+    if (typeof candidate !== 'string') return false;
+    const path = resolve(candidate), child = relative(dirname(expected), path);
+    if (isAbsolute(child) || child === '..' || child.startsWith(`..${sep}`)) return false;
+    this.recordingArtifacts.add(path); return true;
+  }
+  private async discardOwnedRecordings(preserve?: string): Promise<void> {
     const failed: string[] = [];
-    for (const path of this.recordingArtifacts) try { await unlink(path); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') failed.push(path); }
+    const remaining = new Set<string>();
+    for (const path of this.recordingArtifacts) {
+      if (path === preserve) { remaining.add(path); continue; }
+      try {
+        const artifact = await lstat(path);
+        if (!artifact.isFile()) { failed.push(path); remaining.add(path); continue; }
+        await unlink(path);
+      } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') { failed.push(path); remaining.add(path); } }
+    }
+    this.recordingArtifacts = remaining;
     if (failed.length) throw new BlockedError('An unsafe native recording could not be removed from the owned output directory. It was not published.');
-    this.recordingArtifacts.clear();
   }
   async close(): Promise<void> {
     try {

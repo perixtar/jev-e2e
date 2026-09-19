@@ -9,7 +9,11 @@ type Client = ReturnType<typeof createAgentDeviceClient>;
 type ClientConfig = NonNullable<Parameters<typeof createAgentDeviceClient>[0]>;
 type SdkSnapshot = Awaited<ReturnType<Client['capture']['snapshot']>>;
 // Android's pinned SDK omits checked; the read-only platform adapter supplies it.
-export type NativeSnapshot = Omit<SdkSnapshot, 'nodes'> & { nodes: (SdkSnapshot['nodes'][number] & { checked?: boolean })[] };
+export type NativeSnapshot = Omit<SdkSnapshot, 'nodes'> & {
+  nodes: (SdkSnapshot['nodes'][number] & { checked?: boolean })[];
+  systemSurfaceOnly?: boolean;
+  iosSystemSurfaceBundleId?: string;
+};
 export type Device = Awaited<ReturnType<Client['devices']['list']>>[number];
 export function nativeToolEnvironment(environment: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
   const allowed = ['PATH', 'HOME', 'TMPDIR', 'TMP', 'TEMP', 'USERPROFILE', 'LOCALAPPDATA', 'SystemRoot', 'ComSpec', 'PATHEXT', 'ANDROID_HOME', 'ANDROID_SDK_ROOT', 'JAVA_HOME', 'DEVELOPER_DIR', 'LANG', 'LC_ALL'];
@@ -68,6 +72,7 @@ export class DeviceConnection {
     } finally { bounded.removeEventListener('abort', cancel); }
   }
   interrupt() {
+    if (this.stopping) return;
     const worker = this.worker; this.worker = undefined;
     for (const wait of this.pending.values()) wait.reject(new BlockedError('Native work canceled or exceeded its command deadline. The action was not retried.'));
     this.pending.clear();

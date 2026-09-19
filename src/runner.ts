@@ -86,6 +86,7 @@ export async function runSuite(options: RunOptions): Promise<SuiteResult> {
     } catch (error) {
       const reason = signal.aborted ? 'Run canceled.' : planningController.signal.aborted ? 'Planning deadline reached.' : error instanceof BlockedError ? error.message : 'Could not compile or validate the cases.';
       let blocks: ReturnType<typeof splitCases>; try { blocks = splitCases(options.casesText ?? ''); } catch { blocks = [{ name: 'Invalid suite', source: '' }]; }
+      if (reason === 'Credential literals must be replaced with @fixture references.') blocks = blocks.map((_, index) => ({ name: `Blocked private case ${index + 1}`, source: '[PRIVATE INPUT REDACTED]' }));
       plan = { version: 1, cases: blocks.map(block => ({ ...block, goal: block.name, auth: null, steps: [], assertions: [], blockedReason: reason })) };
     } finally { clearTimeout(planningTimer); signal.removeEventListener('abort', stopPlanning); }
     if (directory) await mkdir(directory, { recursive: true, mode: 0o700 });
@@ -103,11 +104,11 @@ export async function runSuite(options: RunOptions): Promise<SuiteResult> {
         if (test.blockedReason) throw new BlockedError(test.blockedReason);
         const values = test.steps.map(step => {
           if (!step.fixture) return step.value;
-          const value = fixtures.inputs[step.fixture]?.value;
+          const value = Object.hasOwn(fixtures.inputs, step.fixture) ? fixtures.inputs[step.fixture]?.value : undefined;
           if (value === undefined) throw new BlockedError(`Missing input fixture: ${step.fixture}.`);
           return value;
         });
-        const auth = test.auth ? fixtures.auth[test.auth] : undefined;
+        const auth = test.auth && Object.hasOwn(fixtures.auth, test.auth) ? fixtures.auth[test.auth] : undefined;
         if (test.auth && !auth) throw new BlockedError(`Missing auth fixture: ${test.auth}.`);
         if (auth) JSON.parse(await readFile(auth.storageState, 'utf8'));
         await options.beforeCase?.(index); caseSignal.throwIfAborted();

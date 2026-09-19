@@ -116,7 +116,7 @@ jev-e2e run --platform android --device emulator-5554 \
 jev-e2e run --replay ./local-report/plan.json --device emulator-5554
 ```
 
-Reports include expected/observed milestones, unchecked expectations, executed actions, versions, model usage/cost, and planning/setup/observation/model/action/check/artifact/cleanup timings. Version-2 native replay plans bind app, platform, and a preserve-data baseline. They store semantic controls and accessibility identifiers, rather than coordinates or ephemeral refs. A stale missing target may be repaired by Jev; ambiguous or unsafe targets block. Existing version-1 web plans retain browser behavior.
+Reports include expected/observed milestones, unchecked expectations, confirmed or uncertain action dispatches, versions, model usage/cost, and planning/setup/observation/model/action/check/artifact/cleanup timings. A target rejected by the final freshness check is not reported as dispatched. Version-2 native replay plans bind app, platform, and a preserve-data baseline. They store semantic controls and accessibility identifiers, rather than coordinates or ephemeral refs. A stale missing target may be repaired by Jev; ambiguous or unsafe targets block. Existing version-1 web plans retain browser behavior.
 
 | Outcome | Exit | Meaning |
 | --- | --- | --- |

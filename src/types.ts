@@ -59,7 +59,7 @@ export type FlowAction = { step: number; navigation: boolean; control: Omit<Cont
 export type CheckResult = { assertion: Assertion; passed: boolean; observed: string | number | boolean | null; reason?: string };
 export type CaseResult = {
   name: string; goal: string; verdict: Verdict; reason: string;
-  checks: CheckResult[]; actions: { step: number; action: string; target: string; replay: boolean }[];
+  checks: CheckResult[]; actions: { step: number; action: string; target: string; replay: boolean; outcome?: 'confirmed' | 'uncertain' }[];
   durationMs: number; screenshot: string | null; flow: FlowAction[];
   video?: string | null;
   videoMetadata?: { durationMs: number; capturedDurationMs?: number; backend?: string; recorder?: 'confirmed'; nativePathDisposition?: 'retirable' | 'retired' };
@@ -78,6 +78,10 @@ export type SuiteResult = {
 export type Progress = { type: string; message: string; caseName?: string; step?: number; screenshot?: string; elapsedMs?: number; cost?: number };
 
 export class BlockedError extends Error { constructor(message: string) { super(message); this.name = 'BlockedError'; } }
+
+export function safeFixtureName(name: string): boolean {
+  return !['__proto__', 'prototype', 'constructor'].includes(name);
+}
 
 export function unsupportedNativeMutation(text: string): boolean {
   return /\b(?:buy(?:\s+now)?|checkout|check\s+out|place\s+(?:an\s+)?order|order\s+now|(?:confirm|submit|finalize|complete)\s+(?:the\s+)?(?:order|booking|reservation)|pay(?:ment)?|purchase|transfer|wire|send|donate|tip|subscribe|book\s+now|message\s+(?:seller|buyer|host|guest|support|user)|(?:publish|post|submit)\s+(?:a\s+|the\s+)?(?:message|comment|review|reply|post))\b/i.test(text);
@@ -101,9 +105,11 @@ export function validateSuite(input: unknown): Suite {
       if (parsed.data.version === 2 && step.action === 'click' && unsupportedNativeMutation(step.target ?? '')) throw new BlockedError('Payment, ordering, transfer, and message-sending actions are unsupported in native tests.');
       if (step.action === 'scroll' && !['up', 'down', 'left', 'right'].includes(step.target ?? '')) throw new BlockedError('Scroll direction must be up, down, left, or right. Each step scrolls once.');
       if (['fill', 'select'].includes(step.action) && ((step.value === null) === (step.fixture === null))) throw new BlockedError('Each input needs exactly one literal value or fixture reference.');
+      if (step.fixture && !safeFixtureName(step.fixture)) throw new BlockedError('Fixture names cannot use reserved object-property names.');
       if (!['fill', 'select'].includes(step.action) && (step.value !== null || step.fixture !== null)) throw new BlockedError('Only fill/select actions accept input values.');
       if (step.value !== null && sensitiveInputTarget(step.target ?? '')) throw new BlockedError('Use a fixture reference for private inputs so their values stay out of model prompts and reports.');
     }
+    if (test.auth && !safeFixtureName(test.auth)) throw new BlockedError('Fixture names cannot use reserved object-property names.');
     for (const assertion of test.assertions) {
       if (parsed.data.version === 1 && (assertion.afterStep !== undefined || assertion.target?.by === 'id')) throw new BlockedError('Native milestones/identifiers require a version-2 plan.');
       if (parsed.data.version === 2 && assertion.kind === 'url') throw new BlockedError('Native apps do not expose a browser URL. Check an observed screen label instead.');
