@@ -37,7 +37,7 @@ async function matrix(platform){
       check.assertion.target?.text==='Desk Lamp'&&check.assertion.afterStep===6&&check.observed===false,
     ][index])):[];
     spent+=result.model.cost;trials.push({platform,mode,round,baselines,baselineVerified,correctFaults,result});
-    if(mode==='healthy'&&result.verdict==='PASS'){const flows=result.cases.map(c=>c.flow);replays[platform]={version:2,plan:result.plan,target:result.target,hash:savedHash(result.plan,result.target,flows),flows};}
+    if(mode==='healthy'&&result.verdict==='PASS'&&!replays[platform]){const flows=result.cases.map(c=>c.flow);replays[platform]={version:2,plan:result.plan,target:result.target,hash:savedHash(result.plan,result.target,flows),flows};}
     await persist();
     if(controller.signal.aborted)return;
     if(mode==='healthy'&&round===rounds&&!replays[platform])throw Error('No complete healthy native flow available for replay.');

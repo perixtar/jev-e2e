@@ -1,8 +1,8 @@
 {
   "inputs": {
-    "email": { "env": "JEV_TEST_EMAIL" },
-    "password": { "env": "JEV_TEST_PASSWORD" },
-    "invalidPassword": { "env": "JEV_TEST_INVALID_PASSWORD" }
+    "email": { "env": "E2E_TEST_EMAIL" },
+    "password": { "env": "E2E_TEST_PASSWORD" },
+    "invalidPassword": { "env": "E2E_TEST_INVALID_PASSWORD" }
   },
   "auth": {}
 }

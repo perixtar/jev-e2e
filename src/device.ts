@@ -14,6 +14,8 @@ export type Device = Awaited<ReturnType<Client['devices']['list']>>[number];
 export class DeviceConnection {
   private worker?: ChildProcess;
   private pending = new Map<string, { resolve: (value: any) => void; reject: (error: Error) => void }>();
+  private ownsSession = false;
+  private stopping?: Promise<boolean>;
   readonly config: ClientConfig;
   constructor(platform?: 'ios' | 'android', session = `jev-${randomUUID()}`, stateDir = resolve(`.jev-e2e/device-${platform ?? 'inventory'}`)) {
     this.config = { session, stateDir, lockPolicy: 'reject', lockPlatform: platform, responseLevel: 'full' };
@@ -46,21 +48,61 @@ export class DeviceConnection {
     const cancel = () => { this.interrupt(); };
     bounded.addEventListener('abort', cancel, { once: true });
     try {
-      return await new Promise<T>((resolve, reject) => {
+      if (command === 'open') this.ownsSession = true;
+      const value = await new Promise<T>((resolve, reject) => {
         this.pending.set(id, { resolve, reject });
         worker.send({ id, config: this.config, command, args }, error => { if (error) { this.pending.delete(id); reject(new BlockedError('Native connection failed.')); } });
       });
+      if (command === 'close') this.ownsSession = false;
+      return value;
+    } catch (error) {
+      // Only definite pre-acquisition failures are safe to mark unowned. Any
+      // other open failure may have acquired SDK resources before failing and
+      // must still close through its owning worker.
+      const message = error instanceof Error ? error.message : '';
+      if (command === 'open' && !bounded.aborted && /in use|claim|lock|another session|no matching device/i.test(message)) this.ownsSession = false;
+      throw error;
     } finally { bounded.removeEventListener('abort', cancel); }
   }
   interrupt() {
     const worker = this.worker; this.worker = undefined;
     for (const wait of this.pending.values()) wait.reject(new BlockedError('Native work canceled or exceeded its command deadline. The action was not retried.'));
     this.pending.clear();
-    worker?.kill('SIGTERM');
+    if (!worker) return;
+    if (!this.ownsSession) { worker.kill('SIGTERM'); return; }
+    // Ask the same owning client to close while the canceled SDK request is
+    // still in flight. Killing first can race daemon disconnect cleanup and
+    // leave a durable device claim behind.
+    const id = randomUUID();
+    this.stopping = new Promise<boolean>(resolveStopping => {
+      let done = false;
+      const finish = (released: boolean) => {
+        if (done) return; done = true; clearTimeout(timer);
+        worker.removeListener('message', onMessage); worker.removeListener('exit', onExit);
+        worker.kill('SIGTERM'); resolveStopping(released);
+      };
+      const onMessage = (message: any) => { if (message.id === id) finish(!message.error); };
+      const onExit = () => finish(false);
+      const timer = setTimeout(() => finish(false), 4500); timer.unref();
+      worker.on('message', onMessage); worker.once('exit', onExit);
+      worker.send({ id, config: this.config, command: 'close', args: {} }, error => { if (error) finish(false); });
+    });
   }
   async close(): Promise<void> {
-    this.interrupt();
+    // Reuse an idle owner connection so its disconnect cleanup cannot race a
+    // fresh close request. Cancellation closes through that owner first.
+    if (this.pending.size) this.interrupt();
+    if (this.stopping) {
+      const released = await this.stopping; this.stopping = undefined;
+      if (released) { this.ownsSession = false; return; }
+    }
+    // A connection that lost a lease race must never send sessions.close():
+    // on iOS that can interrupt the accessibility runner owned by the winner.
+    if (!this.ownsSession) { this.interrupt(); return; }
     try { await this.call('close', {}, AbortSignal.timeout(4500), 4500); }
+    catch (error) {
+      if (!/session.*not found|session_not_found/i.test(error instanceof Error ? error.message : '')) throw error;
+    }
     finally { this.interrupt(); }
   }
 }

@@ -1,7 +1,7 @@
 // Opt-in real SDK checks against the owned Jev Shop fixture; no model calls.
 import assert from 'node:assert/strict';
 import {parseArgs} from 'node:util';
-import {mkdir,writeFile,stat} from 'node:fs/promises';
+import {mkdir,writeFile,stat,readFile} from 'node:fs/promises';
 import {resolve,join} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
 import {MobileDriver} from '../dist/mobile.js';
@@ -17,7 +17,8 @@ const driver=()=>new MobileDriver({...target},['privacy-canary@example.test']);
 const step=(action,target,value=null)=>({action,target,value,fixture:null});
 const check=(kind,id,expected)=>({kind,target:{by:'id',text:id,role:null,within:null},expected});
 const tap=async(d,name)=>{const s=signal(),o=await d.observe(s),matches=o.controls.filter(c=>c.label===name);assert.equal(matches.length,1);await d.execute(o,matches[0],step('click',name),null,s);};
-async function ready(d,login=false){const end=Date.now()+10000;let previous;while(Date.now()<end){const o=await d.observe(signal()),c=o.controls.find(c=>c.identifier==='search-products'||login&&c.identifier==='email');if(c&&previous===c.fingerprint)return o;previous=c?.fingerprint;await delay(150);}throw Error('Fixture controls did not become stable.');}
+const videoDuration=async path=>{const data=await readFile(path),offset=data.indexOf(Buffer.from('mvhd'));assert.ok(offset>0,'MP4 movie header missing');const version=data[offset+4],scaleAt=offset+(version===1?24:16),durationAt=offset+(version===1?28:20),scale=data.readUInt32BE(scaleAt),duration=version===1?Number(data.readBigUInt64BE(durationAt)):data.readUInt32BE(durationAt);return duration/scale*1000;};
+async function ready(d,login=false){const end=Date.now()+10000;let previous;while(Date.now()<end){const o=await d.observe(signal()),c=o.controls.find(c=>c.identifier==='search-products'||login&&c.identifier==='email'||c.label==='Catalog');if(c&&previous===c.fingerprint)return o;previous=c?.fingerprint;await delay(150);}throw Error('Fixture controls did not become stable.');}
 const catalog=d=>ready(d);
 async function gate(name,fn){const start=Date.now();await fn();evidence.push({name,passed:true,durationMs:Date.now()-start});await writeFile(join(directory,'sdk-checks.json'),JSON.stringify({platform:target.platform,device:target.device,evidence},null,2),{mode:0o600});console.log('PASS',name);}
 
@@ -27,6 +28,7 @@ await gate('stale refs reject before dispatch; competing session cannot claim th
   if(o.controls.some(c=>c.identifier==='email')){
     for(const [id,text] of [['email','demo@example.test'],['password','correct-horse']]){o=await d.observe(signal());await d.execute(o,o.controls.find(c=>c.identifier===id),step('fill',id,text),text,signal());}await tap(d,'Sign in');o=await catalog(d);
   }
+  if(!o.controls.some(c=>c.identifier==='search-products')){await tap(d,'Catalog');o=await catalog(d);}
   const c=o.controls.find(c=>c.label==='Cart'),n=o.nodes.get(c.id);await d.observe(signal());
   await assert.rejects(d.connection.call('press',{ref:`@${n.ref}~s${o.native.refsGeneration}`},signal()),/superseded|stale/i);
   await assert.rejects(other.open(signal()),/in use|claim|lock|another session/i);await other.close();
@@ -46,7 +48,7 @@ await gate('switch check is idempotent; uncheck reads the actual state',async()=
  }finally{await d.close();}
 });
 await gate('native recording produces a private clip; a later input screen discards it',async()=>{
- const d=driver();try{await d.open(signal());await catalog(d);await tap(d,'Settings');const valid=join(directory,'sdk-uncut.mp4');await d.startRecording(valid,signal());for(const action of ['check','uncheck']){const o=await d.observe(signal()),c=o.controls.find(c=>c.identifier==='notifications');await d.execute(o,c,step(action,'Notifications'),null,signal());await delay(600);}assert.equal(await d.stopRecording(signal()),valid);assert.ok((await stat(valid)).size>1000);assert.ok((d.recordingMetrics?.capturedDurationMs??0)>1000,d.recordingMetrics);
+ const d=driver();try{await d.open(signal());await catalog(d);await tap(d,'Settings');const valid=join(directory,'sdk-uncut.mp4');await d.startRecording(valid,signal());for(const action of ['check','uncheck']){const o=await d.observe(signal()),c=o.controls.find(c=>c.identifier==='notifications');await d.execute(o,c,step(action,'Notifications'),null,signal());await delay(600);}assert.equal(await d.stopRecording(signal()),valid);assert.ok((await stat(valid)).size>1000);assert.ok(await videoDuration(valid)>1000,JSON.stringify(d.recordingMetrics));assert.ok((d.recordingMetrics?.durationMs??0)>1000,JSON.stringify(d.recordingMetrics));
   const discarded=join(directory,'must-be-discarded.mp4');await d.startRecording(discarded,signal());await tap(d,'Sign out');await d.observe(signal());assert.equal(await d.stopRecording(signal()),null);assert.equal(await stat(discarded).catch(()=>null),null);assert.equal(await d.screenshot(join(directory,'credentials.png'),signal()),false);
   for(const [id,text] of [['email','demo@example.test'],['password','correct-horse']]){const o=await d.observe(signal()),c=o.controls.find(c=>c.identifier===id);await d.execute(o,c,step('fill',id,text),text,signal());}await tap(d,'Sign in');
  }finally{await d.close();}

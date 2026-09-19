@@ -5,7 +5,7 @@
 **Test websites and native apps in plain English. Get evidence for every result.**
 
 [![Status: alpha](https://img.shields.io/badge/status-alpha-orange)](TEST_RESULTS.md)
-[![Node: 22+](https://img.shields.io/badge/node-22%2B-339933)](https://nodejs.org/)
+[![Node: 22.12+](https://img.shields.io/badge/node-22.12%2B-339933)](https://nodejs.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 [Quick start](#quick-start) · [Native mobile](docs/MOBILE.md) · [Write a test](#write-a-test) · [Benchmarks](#live-ebay-benchmark) · [CLI reference](docs/USAGE.md) · [Contribute](CONTRIBUTING.md)
@@ -36,7 +36,7 @@ This is a UI execution experiment with a shared human-authored plan and an exten
 
 ## Quick start
 
-Requires **Node.js 22+** and one **OpenRouter API key**.
+Requires **Node.js 22.12+** and one **OpenRouter API key**.
 
 ### 1. Install from source
 

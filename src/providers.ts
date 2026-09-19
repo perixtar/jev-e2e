@@ -44,7 +44,21 @@ async function post(path: string, payload: Record<string, unknown>, options: Pro
     });
   } catch {
     options.stats.cost += reserve;
-    throw new BlockedError(signal.aborted ? 'Run canceled or timed out.' : 'Model request failed or timed out; its billing outcome is unknown.');
+    if (!signal.aborted && options.stats.requests < options.maxRequests && options.stats.cost + reserve <= options.maxCost) {
+      // A decision request is read-only. Retry one transport timeout within
+      // both budgets; no application mutation has been dispatched yet.
+      options.stats.requests++;
+      if (path.includes('decisions')) options.stats.jevRequests++; else options.stats.plannerRequests++;
+      try {
+        response = await fetcher(`https://openrouter.ai${path}`, {
+          method: 'POST', headers: { Authorization: `Bearer ${options.apiKey}`, 'Content-Type': 'application/json' },
+          body: encoded, signal: AbortSignal.any([signal, AbortSignal.timeout(30000)]),
+        });
+      } catch {
+        options.stats.cost += reserve;
+        throw new BlockedError(signal.aborted ? 'Run canceled or timed out.' : 'Model request failed twice; both billing outcomes are unknown.');
+      }
+    } else throw new BlockedError(signal.aborted ? 'Run canceled or timed out.' : 'Model request failed or timed out; its billing outcome is unknown.');
   }
   let body: Record<string, any>;
   try { body = await response.json(); }

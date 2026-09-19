@@ -1,4 +1,4 @@
-import { mkdir, chmod, unlink } from 'node:fs/promises';
+import { mkdir, chmod, unlink, stat } from 'node:fs/promises';
 import { resolve, extname } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -92,6 +92,7 @@ export class MobileDriver {
   readonly connection: DeviceConnection;
   target: NativeTarget;
   private selection: { platform: 'ios' | 'android'; udid?: string; serial?: string };
+  private appIdentity: string;
   private opened = false;
   private ready = false;
   private recording = false;
@@ -100,6 +101,7 @@ export class MobileDriver {
   recordingDiscardedReason?: string;
   constructor(target: NativeTarget, private secrets: string[]) {
     this.target = target; this.connection = new DeviceConnection(target.platform);
+    this.appIdentity = target.app;
     this.selection = { platform: target.platform };
   }
   async open(signal: AbortSignal): Promise<void> {
@@ -107,36 +109,36 @@ export class MobileDriver {
     const device = selectDevice(devices, this.target.platform, this.target.device || undefined);
     this.target.device = device.id;
     this.selection = { platform: this.target.platform, ...(this.target.platform === 'ios' ? { udid: device.id } : { serial: device.id }) };
-    const extension = extname(this.target.app).toLowerCase();
-    if (extension === '.app' || extension === '.apk') {
-      const installed = await this.connection.call('install', { ...this.selection, appPath: resolve(this.target.app) }, signal, 60000);
+    const appInput = this.target.app, appPath = resolve(appInput), extension = extname(appInput).toLowerCase();
+    const build = await stat(appPath).catch((error: NodeJS.ErrnoException) => { if (error.code === 'ENOENT') return null; throw error; });
+    const pathLike = appInput.includes('/') || appInput.includes('\\') || appInput.startsWith('.');
+    if (build) {
+      const expected = this.target.platform === 'ios' ? '.app' : '.apk';
+      if (extension !== expected) throw new BlockedError(`${this.target.platform} build paths must end in ${expected}.`);
+      const installed = await this.connection.call('install', { ...this.selection, appPath }, signal, 60000);
       const identity = installed.bundleId ?? installed.package ?? installed.appId;
       if (!identity) throw new BlockedError('Installed build did not expose an app identity.');
-      this.target.app = identity;
-    }
+      this.appIdentity = identity;
+    } else if (pathLike) throw new BlockedError('Native build path does not exist. Pass an existing .app/.apk path or an installed app ID.');
     this.opened = true;
-    const result = await this.connection.call('open', { ...this.selection, app: this.target.app, relaunch: true, timeoutMs: 60000 }, signal, 60000);
-    if (result.device?.id !== this.target.device || result.appBundleId !== this.target.app) throw new BlockedError('Native open selected a different app/device.');
+    const result = await this.connection.call('open', { ...this.selection, app: this.appIdentity, relaunch: true, timeoutMs: 60000 }, signal, 60000);
+    if (result.device?.id !== this.target.device || result.appBundleId !== this.appIdentity) throw new BlockedError('Native open selected a different app/device.');
     this.ready = true;
   }
   async observe(signal: AbortSignal): Promise<NativeObservation> {
     if (!this.ready) throw new BlockedError('Open an owned native app session before capturing evidence.');
     const end = Date.now() + 5000;
     do {
-      let raw = await this.connection.call<NativeSnapshot>('snapshot', { forceFull: true, timeoutMs: 15000 }, signal, 20000);
-      if (this.target.platform === 'android' && raw.appBundleId === this.target.app) raw = await readAndroidChecked(raw, this.target.device, this.target.app, signal);
+      const raw = await this.rawSnapshot(signal);
       // A newly launched React Native app may initially expose only its root.
       // Waiting for evidence is safe; interpreting that tree as an absent field isn't.
       if (raw.nodes?.some(node => node.index !== 0 && visible(node)) && raw.snapshotQuality?.state !== 'sparse') {
-        if (this.recording && !this.captureSafe(raw)) {
+        if (this.recording && !this.captureAllowed(raw)) {
           // Discard the whole local clip if a later screen exposes an input or
           // known secret. It must never become a shareable report artifact.
-          const path = await this.stopRecording(signal);
-          if (path) await unlink(path).catch(() => {});
-          this.recordingPath = undefined;
-          this.recordingDiscardedReason = 'Recording was discarded because a later screen exposed an input or known secret.';
+          await this.finishRecording(signal, false);
         }
-        return normalizeNative(raw, this.target.app, this.secrets);
+        return normalizeNative(raw, this.appIdentity, this.secrets);
       }
       await delay(100, undefined, { signal });
     } while (Date.now() < end);
@@ -181,7 +183,7 @@ export class MobileDriver {
     signal.throwIfAborted();
   }
   async direct(step: Step, signal: AbortSignal): Promise<void> {
-    if (step.action === 'relaunch') await this.connection.call('open', { ...this.selection, app: this.target.app, relaunch: true }, signal, 15000);
+    if (step.action === 'relaunch') await this.connection.call('open', { ...this.selection, app: this.appIdentity, relaunch: true }, signal, 15000);
     else if (step.action === 'back') await this.connection.call('back', { settle: true, settleQuietMs: 100, timeoutMs: 1500 }, signal, 10000);
     else if (step.action === 'keyboard') {
       const observation = await this.observe(signal);
@@ -213,51 +215,76 @@ export class MobileDriver {
   }
   async stopRecording(signal: AbortSignal): Promise<string | null> {
     if (!this.recording) return null;
+    let safe = false;
+    try {
+      const raw = await this.rawSnapshot(signal);
+      safe = raw.appBundleId === this.appIdentity && raw.nodes?.length > 0 && ['healthy', 'recovered'].includes(raw.snapshotQuality?.state ?? '') && this.captureAllowed(raw);
+    } catch { /* Missing final evidence must discard pixels, never publish them. */ }
+    return this.finishRecording(signal, safe);
+  }
+  private async finishRecording(signal: AbortSignal, safe: boolean): Promise<string | null> {
     const result = await this.connection.call('record', { action: 'stop' }, signal, 20000);
-    this.recording = false;
     const path = this.recordingPath;
-    if (result.recording !== 'stopped' || !path || resolve(result.outPath) !== resolve(path)) throw new BlockedError('Native recorder returned an invalid artifact identity.');
+    if (result?.recording !== 'stopped' || !path || typeof result.outPath !== 'string' || resolve(result.outPath) !== resolve(path)) throw new BlockedError('Native recorder returned an invalid artifact identity.');
+    if (!Number.isFinite(result.durationMs) || result.durationMs <= 0 || result.capturedDurationMs !== undefined && (!Number.isFinite(result.capturedDurationMs) || result.capturedDurationMs <= 0)) throw new BlockedError('Native recorder produced no usable timeline.');
+    await chmod(path, 0o600);
     this.recordingMetrics = { durationMs: result.durationMs, ...(result.capturedDurationMs === undefined ? {} : {capturedDurationMs:result.capturedDurationMs}), ...(result.recordingBackend ? {backend:result.recordingBackend} : {}) };
-    if (!Number.isFinite(result.durationMs) || result.durationMs <= 0 || result.capturedDurationMs !== undefined && result.capturedDurationMs <= 0) throw new BlockedError('Native recorder produced no usable timeline.');
-    if (path) await chmod(path, 0o600);
-    return path ?? null;
+    this.recording = false;
+    if (!safe) {
+      await unlink(path).catch(() => {}); this.recordingPath = undefined;
+      this.recordingDiscardedReason = 'Recording was discarded because the final screen was unsafe or could not be verified.';
+      return null;
+    }
+    return path;
   }
   async screenshot(path: string, signal: AbortSignal): Promise<boolean> {
     // Conservatively omit pixels when any private field/known secret is visible.
     // This avoids a new image dependency and is safer than text-only redaction.
     const observation = await this.observe(signal);
-    if (!this.captureSafe(observation.native)) return false;
+    if (!this.captureAllowed(observation.native)) return false;
     await this.connection.call('screenshot', { path, normalizeStatusBar: true }, signal, 10000);
     await chmod(path, 0o600); return true;
   }
   interrupt() { this.connection.interrupt(); }
-  private captureSafe(raw: NativeSnapshot): boolean {
+  captureAllowed(raw: NativeSnapshot): boolean {
     return !raw.nodes.some(node => normalizedRole(node) === 'textbox' || node.password || this.secrets.some(secret => secret && `${node.label ?? ''} ${node.value ?? ''} ${node.identifier ?? ''}`.includes(secret)));
   }
+  private async rawSnapshot(signal: AbortSignal): Promise<NativeSnapshot> {
+    let raw = await this.connection.call<NativeSnapshot>('snapshot', { forceFull: true, timeoutMs: 15000 }, signal, 20000);
+    if (this.target.platform === 'android' && raw.appBundleId === this.appIdentity) raw = await readAndroidChecked(raw, this.target.device, this.appIdentity, signal);
+    return raw;
+  }
+  get resolvedApp(): string { return this.appIdentity; }
   async close(): Promise<void> {
     try {
-      if (this.opened) { try { await this.connection.close(); } finally { this.opened = false; this.ready = false; } }
+      if (this.opened) { await this.connection.close(); this.opened = false; this.ready = false; }
       else this.connection.interrupt();
     } finally {
       if (this.recordingPath && this.recording) { await unlink(this.recordingPath).catch(() => {}); this.recording = false; }
     }
   }
 }
-export async function nativeVersions(target: NativeTarget): Promise<Record<string, string>> {
-  const execute = promisify(execFile), versions: Record<string, string> = { backend: 'agent-device@0.21.6', node: process.version, platform: target.platform, app: target.app, device: target.device };
+export function nativeMetadataEnvironment(environment: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const allowed = ['PATH', 'HOME', 'TMPDIR', 'ANDROID_HOME', 'ANDROID_SDK_ROOT', 'JAVA_HOME', 'DEVELOPER_DIR', 'LANG', 'LC_ALL'];
+  return Object.fromEntries(allowed.flatMap(name => environment[name] === undefined ? [] : [[name, environment[name]]]));
+}
+export async function nativeVersions(target: NativeTarget, signal: AbortSignal): Promise<Record<string, string>> {
+  signal.throwIfAborted();
+  const execute = promisify(execFile), command = { timeout: 3000, signal, env: nativeMetadataEnvironment() };
+  const versions: Record<string, string> = { backend: 'agent-device@0.21.6', node: process.version, platform: target.platform, app: target.app, device: target.device };
   try {
     if (target.platform === 'ios') {
-      const { stdout } = await execute('xcrun', ['simctl', 'list', 'devices', '-j'], { timeout: 3000 });
+      const { stdout } = await execute('xcrun', ['simctl', 'list', 'devices', '-j'], command);
       const data = JSON.parse(stdout);
       for (const [runtime, devices] of Object.entries(data.devices) as [string, { udid: string }[]][]) if (devices.some(device => device.udid === target.device)) versions.os = runtime;
-      const { stdout: container } = await execute('xcrun', ['simctl', 'get_app_container', target.device, target.app, 'app'], { timeout: 3000 });
-      const { stdout: info } = await execute('plutil', ['-convert', 'json', '-o', '-', resolve(container.trim(), 'Info.plist')], { timeout: 3000 });
+      const { stdout: container } = await execute('xcrun', ['simctl', 'get_app_container', target.device, target.app, 'app'], command);
+      const { stdout: info } = await execute('plutil', ['-convert', 'json', '-o', '-', resolve(container.trim(), 'Info.plist')], command);
       const metadata = JSON.parse(info); versions.appVersion = `${metadata.CFBundleShortVersionString ?? '?'} (${metadata.CFBundleVersion ?? '?'})`;
     } else {
-      const { stdout } = await execute('adb', ['-s', target.device, 'shell', 'getprop', 'ro.build.version.release'], { timeout: 3000 }); versions.os = stdout.trim();
-      const { stdout: info } = await execute('adb', ['-s', target.device, 'shell', 'dumpsys', 'package', target.app], { timeout: 3000 });
+      const { stdout } = await execute('adb', ['-s', target.device, 'shell', 'getprop', 'ro.build.version.release'], command); versions.os = stdout.trim();
+      const { stdout: info } = await execute('adb', ['-s', target.device, 'shell', 'dumpsys', 'package', target.app], command);
       versions.appVersion = `${info.match(/versionName=(\S+)/)?.[1] ?? '?'} (${info.match(/versionCode=(\d+)/)?.[1] ?? '?'})`;
     }
-  } catch { versions.os = 'unavailable'; }
+  } catch { signal.throwIfAborted(); versions.os = 'unavailable'; }
   return versions;
 }

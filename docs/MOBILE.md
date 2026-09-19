@@ -23,7 +23,7 @@ An installed bundle/package ID is easiest. A simulator `.app` or emulator `.apk`
 | Android | Java, Android SDK, `adb` on PATH, booted emulator | Emulator `.apk`, or installed package ID |
 | Website | Node and Chromium (`jev-e2e setup`) | HTTP(S) URL |
 
-Mobile requires Node >=22.12 and the pinned optional `agent-device@0.21.6` package. Browser-only installations can use `npm install --omit=optional`; they need neither Xcode nor Android tools. If your package manager omitted it, install the pinned SDK before native tests.
+Mobile requires Node >=22.12 and the pinned optional `agent-device@0.21.6` package. A source checkout must use the documented `npm ci` before building because the compiler reads the SDK types. After `npm pack` produces a prebuilt tarball, a browser-only consumer may install that tarball with `--omit=optional`; native commands then give an actionable missing-SDK error. Browser-only use needs neither Xcode nor Android tools.
 
 `doctor` checks local tools without opening your app. It does not install host toolchains or open accounts. For Android, export `ANDROID_HOME` and add `$ANDROID_HOME/platform-tools` to PATH **before** the first run; the local SDK daemon retains its startup environment.
 
@@ -96,8 +96,8 @@ On Android, clearing a controlled text field can replace its native input connec
 ```json
 {
   "inputs": {
-    "email": { "env": "JEV_TEST_EMAIL" },
-    "password": { "env": "JEV_TEST_PASSWORD" }
+    "email": { "env": "E2E_TEST_EMAIL" },
+    "password": { "env": "E2E_TEST_PASSWORD" }
   },
   "auth": {}
 }

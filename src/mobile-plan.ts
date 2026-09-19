@@ -53,8 +53,10 @@ export function parseNative(text: string, platform: 'ios' | 'android'): Suite {
 export function authoredNativeSteps(source: string): Step[] {
   const intent = source.split('\n').filter(line => !/^(Case|Expect):/i.test(line)).join('\n');
   const token = '"(?:\\\\.|[^"\\\\])*"';
-  const expression = new RegExp("\\b(?:fill|replace)\\s+"+token+"\\s+(?:with|using|=)\\s+(?:"+token+"|@[A-Za-z0-9_.-]+)|\\b(?:tap|click|check|uncheck|enable|disable)\\s+(?:the\\s+)?"+token+"|\\b(?:dismiss|hide)\\s+(?:the\\s+)?keyboard|\\b(?:go\\s+)?back\\b|\\brelaunch\\b|\\bscroll\\s+(?:up|down|left|right)\\b|\\bwait\\s+for\\s+(?:the\\s+)?(?:exact\\s+)?text\\s+"+token, 'gi');
+  const value = '(?:'+token+'|@[A-Za-z0-9_.-]+)';
+  const expression = new RegExp("\\bin\\s+"+token+"\\s+use\\s+"+value+"|\\b(?:fill|replace)\\s+"+token+"\\s+(?:with|using|=)\\s+"+value+"|\\b(?:tap|click|check|uncheck|enable|disable)\\s+(?:the\\s+)?"+token+"|\\b(?:dismiss|hide)\\s+(?:the\\s+)?keyboard|\\b(?:go\\s+)?back\\b|\\brelaunch\\b|\\bscroll\\s+(?:up|down|left|right)\\b|\\bwait\\s+for\\s+(?:the\\s+)?(?:exact\\s+)?text\\s+"+token, 'gi');
   return [...intent.matchAll(expression)].map(match => nativeStep(match[0]
+    .replace(new RegExp('^in\\s+('+token+')\\s+use\\s+('+value+')$','i'),'Fill $1 with $2')
     .replace(/^replace\b/i,'Fill').replace(/\s+using\s+/i,' with ')
     .replace(/^(tap|click|check|uncheck|enable|disable)\s+the\s+/i,'$1 ')
     .replace(/^(dismiss|hide)\s+(?:the\s+)?keyboard$/i,'Dismiss keyboard')
@@ -64,11 +66,11 @@ export function authoredNativeSteps(source: string): Step[] {
 export async function compileNative(text: string, platform: 'ios' | 'android', mode: 'on' | 'off', fixtures: Fixtures, provider: ProviderOptions, signal: AbortSignal, secrets: string[]): Promise<Suite> {
   signal.throwIfAborted();
   if (containsSecret(text, secrets) || /(?:password|email|token|secret|api.?key)"?\s*(?:with|using|=|is)\s*"/i.test(text)) throw new BlockedError('Use @fixture references for credential inputs.');
+  if (/^Auth:/im.test(text) || /captcha|biometric|face id|touch id|canvas|pixel|looks (?:good|right)|\bpay(?:ment)?\b|\bpurchase\b|send (?:a )?(?:dm|message)/i.test(text)) throw new BlockedError('This native case needs an unsupported capability. Use observed UI actions and exact expectations.');
   const baseline = parseNative(text, platform);
   if (mode === 'off' || baseline.cases.every(test => !test.blockedReason)) return baseline;
   // Explicit unsupported steps are a user contract, never a request to invent replacements.
   if (/^Step:/im.test(text)) return baseline;
-  if (/^Auth:/im.test(text) || /captcha|biometric|face id|touch id|canvas|pixel|looks (?:good|right)|purchase|send (?:a )?(?:dm|message)/i.test(text)) throw new BlockedError('This native case needs an unsupported capability. Use observed UI actions and exact expectations.');
   const blocks = splitCases(text);
   const sourceBlocks = blocks.map(block => ({ ...block, requiredSteps: authoredNativeSteps(block.source), requiredAssertions: block.source.split('\n').filter(line => /^Expect:/i.test(line)).map(line => nativeExpectation(line.replace(/^Expect:\s*/i, ''))) }));
   if (sourceBlocks.some(block => !block.requiredAssertions.length)) throw new BlockedError('Add explicit Expect lines. Tests need authored correctness criteria.');
@@ -78,12 +80,8 @@ export async function compileNative(text: string, platform: 'ios' | 'android', m
     const test = suite.cases[i], block = blocks[i];
     if (test.name !== block.name || test.source !== block.source || test.auth) throw new BlockedError('Planner changed a case identity or native authentication contract.');
     if (test.blockedReason) continue;
-    let cursor = 0;
-    for (const required of sourceBlocks[i].requiredSteps) {
-      const index = test.steps.findIndex((step, index) => index >= cursor && JSON.stringify(step) === JSON.stringify(required));
-      if (index < 0) throw new BlockedError('Planner changed an authored action, input binding, or action order.');
-      cursor = index + 1;
-    }
+    const requiredSteps = sourceBlocks[i].requiredSteps;
+    if (!requiredSteps.length || test.steps.length !== requiredSteps.length || test.steps.some((step, index) => JSON.stringify(step) !== JSON.stringify(requiredSteps[index]))) throw new BlockedError('Planner added or changed an authored action, input binding, or action order. Use explicit Step lines when an action cannot be recognized safely.');
     for (const ref of block.source.matchAll(/@([A-Za-z0-9_.-]+)/g)) if (!test.steps.some(step => step.fixture === ref[1])) throw new BlockedError('Planner dropped a fixture binding.');
     const intent = JSON.stringify({ steps: test.steps, assertions: test.assertions });
     for (const m of block.source.matchAll(/"((?:\\.|[^"\\])*)"/g)) if (!intent.includes(JSON.stringify(quote(m[1])).slice(1, -1))) throw new BlockedError('Planner changed a supplied literal.');

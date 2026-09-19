@@ -41,6 +41,7 @@ export async function startUi(port = 4007, dataDirectory = '.jev-e2e') {
       }
       if (request.method === 'GET' && /^\/runs\/[a-f0-9-]+\/(report.html|report.json|plan.json|preview.png|\d+\.(png|mp4))$/.test(path)) {
         const [, , id, filename] = path.split('/'); const job = jobs.get(id); if (!job || !job.result && filename !== 'preview.png') { json({ error: 'Report not found.' }, 404); return; }
+        if (/^\d+\.mp4$/.test(filename) && !job.result?.cases.some(test => test.video === filename) || /^\d+\.png$/.test(filename) && !job.result?.cases.some(test => test.screenshot === filename)) { json({ error: 'Artifact not published by this result.' }, 404); return; }
         const content = await readFile(join(job.directory, filename)); response.setHeader('Content-Type', filename.endsWith('.mp4') ? 'video/mp4' : filename.endsWith('.png') ? 'image/png' : filename.endsWith('.html') ? 'text/html' : 'application/json');
         if (filename.endsWith('.mp4')) {
           response.setHeader('Accept-Ranges', 'bytes');

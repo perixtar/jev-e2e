@@ -58,7 +58,7 @@ export async function runMobileSuite(options: RunOptions): Promise<SuiteResult> 
       const values = test.steps.map(step => { if (!step.fixture) return step.value; const value = fixtures.inputs[step.fixture]?.value; if (value === undefined) throw new BlockedError(`Missing input fixture: ${step.fixture}.`); return value; });
       await options.beforeCase?.(i); caseSignal.throwIfAborted();
       await timed('setup', () => driver.open(caseSignal));
-      Object.assign(target, driver.target); versions = await nativeVersions(target);
+      target.device = driver.target.device; versions = await nativeVersions({ ...target, app: driver.resolvedApp }, caseSignal);
       progress({ type: 'context.opened', message: `Opened ${platform} app on ${target.device}; data is preserved.`, caseName: test.name });
       const lastPrivate = test.steps.reduce((last, step, index) => step.fixture || /password|email|token|secret/i.test(step.target ?? '') ? index : last, -1);
       let cacheIndex = 0;
@@ -69,7 +69,7 @@ export async function runMobileSuite(options: RunOptions): Promise<SuiteResult> 
         // the current full screen contains no private fields/known values.
         if (options.record && directory && !recordingStarted && stepIndex > lastPrivate) {
           const state = await timed('observation', () => driver.observe(caseSignal));
-          if (!state.native.nodes.some(node => node.password || /textfield|edittext|searchfield/i.test(node.type ?? '') || secrets.some(secret => `${node.label ?? ''} ${node.value ?? ''}`.includes(secret)))) {
+          if (driver.captureAllowed(state.native)) {
             await timed('artifact', () => driver.startRecording(join(directory, `${i + 1}.mp4`), caseSignal)); recordingStarted = true;
           }
         }
@@ -100,7 +100,7 @@ export async function runMobileSuite(options: RunOptions): Promise<SuiteResult> 
             } else control = observation.controls.find(item => item.id === selection.target);
           }
           if (!control || control.disabled || !control.capabilities?.includes(navigation ? 'click' : step.action)) throw new BlockedError('Decision selected an unavailable or incompatible native control.');
-          if (!navigation && /^Step:/im.test(test.source) && control.label !== step.target && control.identifier !== step.target) throw new BlockedError('Decision changed an explicitly named native target. The action was not dispatched.');
+          if (!navigation && control.label !== step.target && control.identifier !== step.target) throw new BlockedError('Decision changed the authored native target. The action was not dispatched.');
           if (navigation && /delete|remove|pay|purchase|archive|save|submit|sign in|log in|sign out|add|increase|decrease|enable|disable/i.test(control.label)) throw new BlockedError('Decision attempted unsafe native navigation.');
           // Once a private value has been entered, later captures must never
           // include it. A recording intentionally excludes all credential steps.
@@ -137,14 +137,15 @@ export async function runMobileSuite(options: RunOptions): Promise<SuiteResult> 
         if (driver.recordingDiscardedReason) result.evidenceNotes = [...(result.evidenceNotes ?? []), driver.recordingDiscardedReason];
       }
       let released = false;
-      try { await timed('cleanup', () => driver.close()); released = true; } catch { result.verdict = 'BLOCKED'; result.reason = 'Owned native session cleanup could not be confirmed.'; }
+      try { await timed('cleanup', () => driver.close()); released = true; }
+      catch { result.verdict = 'BLOCKED'; result.reason = 'Owned native session cleanup could not be confirmed.'; await driver.close().catch(() => {}); }
       signal.removeEventListener('abort', stop);
       result.durationMs = Date.now() - caseStart; results.push(result);
       progress({ type: 'context.closed', message: released ? 'Released the owned native session.' : 'Owned native session release was not confirmed.', caseName: test.name });
       progress({ type: 'result', message: `${result.verdict}: ${result.reason}`, caseName: test.name });
     }
   }
-  const result: SuiteResult = sanitize({ version: 2, id, startedAt: new Date(start).toISOString(), url: `app://${target.app}`, target, versions, timings, verdict: signal.aborted || results.some(test => test.verdict === 'BLOCKED') ? 'BLOCKED' : results.every(test => test.verdict === 'PASS') ? 'PASS' : 'FAIL', canceled: signal.aborted, cases: results, durationMs: Date.now() - start, model: provider.stats, plan, reportDirectory: directory }, secrets);
+  const result: SuiteResult = sanitize({ version: 2, id, startedAt: new Date(start).toISOString(), url: `app://${versions.app ?? target.app}`, target, versions, timings, verdict: signal.aborted || results.some(test => test.verdict === 'BLOCKED') ? 'BLOCKED' : results.every(test => test.verdict === 'PASS') ? 'PASS' : 'FAIL', canceled: signal.aborted, cases: results, durationMs: Date.now() - start, model: provider.stats, plan, reportDirectory: directory }, secrets);
   if (directory) await writeReport(result, directory);
   return result;
 }

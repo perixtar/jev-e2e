@@ -4,7 +4,7 @@ Updated September 18, 2026. These remain the gates for the local open-source pro
 
 ## Scope and verdict contract
 
-Test ordinary Chromium websites: forms, buttons, links, checkboxes, native selects, authenticated fixtures, and asynchronous rendering. Native desktop/mobile apps, CAPTCHA, payment-provider flows, visual layout judgments, canvas controls, and complex cross-origin frames are outside the first release's advertised scope. Unsupported requirements must receive a useful BLOCKED reason.
+Test ordinary Chromium websites plus accessible local apps on an iOS Simulator or Android Emulator. Browser coverage includes forms, buttons, links, checkboxes, native selects, authenticated fixtures, and asynchronous rendering. Native coverage includes exact accessible taps, fills, switches, scrolling, back, keyboard dismissal, relaunch/persistence, local recording, and checked milestones. Physical phones, hosted devices, native desktop apps, CAPTCHA, payment-provider flows, biometrics, arbitrary canvas/visual judgments, complex WebViews, and complex cross-origin frames remain outside this release. Unsupported requirements must receive a useful BLOCKED reason.
 
 PASS requires every required milestone and assertion to be checked and satisfied on fresh evidence. FAIL requires observed behavior that contradicts a required expectation. BLOCKED records an inability to execute or verify, including missing data, ambiguity, provider errors, limits, and cancellation. Never treat a model's DONE or confidence as a test verdict. A canceled suite remains non-passing even if its already completed cases passed.
 
@@ -36,6 +36,23 @@ The general model is optional. Free-form cases use a configured interpreter thro
 | Secrets and lifecycle | Keys/fixture secrets are absent from frontend storage, model state, and shareable reports. Stop prevents further dispatch and releases owned resources within 5s in controlled tests; an unknown mutation is never automatically repeated | Fake-secret scans and cancellation during planning, Jev calls, and browser waits; inspect resource teardown |
 | UI and installation | Keyboard/focus/contrast pass; usable at 1440px, 768px, and 390px. Clean Node 22+ macOS/Linux installations run UI and CLI via the documented setup | Responsive UI verification and packed-package installation smoke tests |
 | Configuration and limits | Planner-off needs no generative configuration. Invalid/missing selected-provider configuration is actionable; request/action/deadline/spending limits remain non-passing rather than silently changing models or expectations | Configuration, error, and limit tests; retain provider usage and obey the project key cap during evaluation |
+
+## Native mobile alpha exit criteria
+
+These gates apply independently to iOS Simulator and Android Emulator unless a row says otherwise. Every paid run is first-attempt evidence; BLOCKED does not count as a detected fault.
+
+| Gate | Exit criterion | How verified |
+| --- | --- | --- |
+| SDK contract and ownership | The real pinned SDK can open, observe, fill, tap, check, record, and close the owned fixture. Stale references reject before dispatch; ambiguous/physical-device selection blocks; a competing lease cannot disturb the owner | Live SDK gate on the exact project-owned simulator/emulator, including Unicode replacement and idempotent switch state |
+| Natural-language fidelity | At least 19/20 independently authored prose cases compile faithfully on each platform, preserving action order, exact literals, fixtures, and expectations | Fresh one-case-per-request paid cohort; retain all outputs and provider usage |
+| Healthy discovery | Five representative flows × 10 first attempts produce at least 48/50 PASS per platform and at least 9/10 for every flow | Reset the owned fixture baseline before each run; use the same cases, limits, and evaluation rules |
+| Fault detection | Five observable faults × 10 first attempts produce zero PASS and at least 48/50 correct FAIL per platform | Seed one known contradiction at a time; a BLOCKED result is reported separately and does not count as detection |
+| Saved replay | 50 first-attempt replays per platform produce at least 48/50 PASS and make zero planner requests | Freeze only a complete healthy discovery flow, restore the same baseline, and re-run every authored assertion |
+| Evidence agreement | CLI exit status, JSON, HTML, and workbench show the same PASS/FAIL/BLOCKED verdict and expected-versus-observed checks | Inspect representative pass, fault, block, cancellation, recording, and replay results |
+| Stop and release | Stop prevents any later action dispatch. Cancellation during provider selection, snapshot, fill, press/settle, and metadata releases the owned session within five seconds; unrelated sessions remain untouched | Live cancellation/reopen gates plus exact-device inventory before and after |
+| Privacy and artifacts | Keys and fixture values are absent from frontend/model/shareable output. Recording is opt-in/local, starts after credentials, and is discarded when any later or final screen contains an input/known secret or cannot be verified | Fake-secret scans, malformed-recorder tests, final-screen checks, file permissions, and manual clip inspection |
+| Limits, cost, and speed | Request/action/deadline/cost limits stay non-passing. For healthy flows with at most ten authored actions, warm discovery median is at most 60 seconds per platform | Publish full-run timing phases, request counts, billed provider cost, cold setup separately, and every first attempt |
+| Distribution and demonstration | Type/build/browser regressions pass; packed installs work with and without the optional SDK as documented; native smoke runs use the installed package. README includes a checked uncut native run and a roughly ten-second edit with a large readable phone view | Clean temporary installs, real browser/workbench flow, native CLI smoke, decoded video/frame QA, and independent final-SHA review |
 
 Zero false passes on this controlled benchmark is a release gate, not a guarantee for all websites. If a gate fails, keep the product labeled as a development preview and publish the limitation rather than implying the release is validated. Do not drop difficult benchmark cases to improve the score.
 

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { chromium } from 'playwright';
@@ -27,6 +27,7 @@ test('workbench reviews three cases, runs, inspects, saves, replays, stops and s
     await page.getByLabel('Interpret freeform language').uncheck();await page.getByText('Fixtures and saved flows',{exact:true}).click();await page.getByLabel('Local fixtures JSON path').fill(fixturePath);
     await page.getByRole('button',{name:'Review plan'}).click();await page.getByRole('button',{name:'Run reviewed plan'}).waitFor();await page.waitForFunction(()=>!document.querySelector('#run').disabled);
     assert.equal(await page.locator('#plan .case-card').count(),3);await page.getByRole('button',{name:'Run reviewed plan'}).click();await page.waitForFunction(()=>!document.querySelector('#review').disabled&&document.querySelector('#status').textContent.startsWith('PASS'),{},{timeout:30000});assert.equal(await page.locator('#results .PASS').count(),3);assert.equal(await page.locator('#results img').count(),3);
+    const reportPath=await page.locator('#report').getAttribute('href'),jobId=reportPath.split('/')[2];await writeFile(join(directory,'ui','runs',jobId,'99.mp4'),'private pixels');assert.equal((await originalFetch(ui.url+`/runs/${jobId}/99.mp4`)).status,404);
     await page.getByRole('button',{name:'Save plan / flow'}).click();await page.waitForFunction(()=>document.querySelector('#saved').value.length>0);const saved=await page.getByLabel('Saved plan path (optional)').inputValue();assert.ok((await readFile(saved,'utf8')).includes('Acme'));
     demo.reset();await page.getByRole('button',{name:'Run reviewed plan'}).click();await page.waitForFunction(()=>!document.querySelector('#review').disabled&&document.querySelector('#status').textContent.startsWith('PASS'),{},{timeout:30000});
     assert.ok(!(await page.content()).includes(process.env.OPENROUTER_API_KEY));assert.equal(await page.evaluate(()=>localStorage.length),0);
