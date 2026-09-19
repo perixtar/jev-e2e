@@ -17,7 +17,7 @@ function negatedNativeAction(text: string): boolean {
   return false;
 }
 function conditionalNativeAction(text: string): boolean {
-  const intent = nativeIntent(text);
+  const intent = nativeIntent(text).replace(/"(?:\\.|[^"\\])*"/g, '""');
   return /\b(?:if|unless|otherwise|when|in\s+case|provided\s+that)\b|\bafter\b[^.?!;\n]*?\b(?:is|are|becomes?|turns?|appears?|exists?|loads?|ready|visible|present|enabled|checked|updates?|changes?)\b/i.test(intent);
 }
 export function nativeStep(text: string): Step {

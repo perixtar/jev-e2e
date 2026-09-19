@@ -67,7 +67,7 @@ await gate('cancel an SDK snapshot releases the session within five seconds',asy
 for(const command of ['fill','press'])await gate(`cancel native ${command}/settle dispatches once, with no following step`,async()=>{
  // Earlier gates leave the fixture on Settings; each cancellation case needs
  // the search field visible before measuring an in-flight fill or press.
- const baseline=driver();try{await baseline.open(signal());const o=await ready(baseline,true);if(!o.controls.some(c=>c.identifier==='search-products'))await tap(baseline,'Catalog');}finally{await baseline.close();}
+ const baseline=driver();try{await baseline.open(signal());let o=await ready(baseline,true);if(o.controls.some(c=>c.identifier==='email')){for(const [id,text] of [['email','demo@example.test'],['password','correct-horse']]){o=await baseline.observe(signal());await baseline.execute(o,o.controls.find(c=>c.identifier===id),step('fill',id,text),text,signal());}await tap(baseline,'Sign in');o=await catalog(baseline);}if(!o.controls.some(c=>c.identifier==='search-products'))await tap(baseline,'Catalog');}finally{await baseline.close();}
  const controller=new AbortController(),original=MobileDriver.prototype.execute;let dispatches=0,stopped=0;
  MobileDriver.prototype.execute=async function(...args){const call=this.connection.call.bind(this.connection);this.connection.call=(kind,input,...rest)=>{
   if(kind===command){dispatches++;setTimeout(()=>{stopped=Date.now();controller.abort();},command==='press'?1000:80);if(kind==='press')input={...input,settleQuietMs:3000,timeoutMs:5000};}
