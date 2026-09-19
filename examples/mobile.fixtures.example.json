@@ -1,0 +1,8 @@
+{
+  "inputs": {
+    "email": { "env": "JEV_TEST_EMAIL" },
+    "password": { "env": "JEV_TEST_PASSWORD" },
+    "invalidPassword": { "env": "JEV_TEST_INVALID_PASSWORD" }
+  },
+  "auth": {}
+}

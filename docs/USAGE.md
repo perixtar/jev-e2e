@@ -1,6 +1,7 @@
 # CLI and case reference
 
 Commands below run from the repository root after the [source installation](../README.md#quick-start).
+For iOS Simulator and Android Emulator setup, steps, expectations, recording, and replay, use the [native mobile guide](MOBILE.md).
 
 ```sh
 # Read-only public-site example; no auth fixtures needed.

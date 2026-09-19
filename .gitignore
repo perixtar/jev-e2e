@@ -1,4 +1,8 @@
 node_modules/
+Pods/
+examples/mobile-app/ios/
+examples/mobile-app/android/
+examples/mobile-app/.expo/
 dist/
 coverage/
 .env

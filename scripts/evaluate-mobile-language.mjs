@@ -1,0 +1,35 @@
+// Opt-in paid compilation checks. Expected contracts are authored independently.
+import {compileNative} from '../dist/mobile-plan.js';import {providerOptions} from '../dist/runner.js';import {loadEnvironment} from '../dist/config.js';import {writeFile,mkdir} from 'node:fs/promises';import {parseArgs} from 'node:util';import {resolve,dirname} from 'node:path';
+const {values}=parseArgs({options:{live:{type:'boolean'},out:{type:'string'},'max-cost':{type:'string',default:'0.20'}}});
+if(!values.live)throw Error('Live language evaluation requires --live. Ordinary npm test is free.');
+const cap=Number(values['max-cost']);if(!Number.isFinite(cap)||cap<=0||cap>1)throw Error('max-cost must be in (0,1].');
+loadEnvironment();const fixtures={inputs:{email:{value:'demo@example.test'},password:{value:'correct-horse'},invalidPassword:{value:'wrong-horse'}},auth:{}};
+const step=(action,target=null,value=null,fixture=null)=>({action,target,value,fixture});
+const descriptions=[
+ ['Open catalog','Tap "Catalog".','text "Find your favorite." is visible',[step('click','Catalog')]],
+ ['Open settings','Tap "Settings" to inspect the preferences.','text "Make it yours." is visible',[step('click','Settings')]],
+ ['Search','Replace "Search products" with "lamp", then dismiss the keyboard.','text "Desk Lamp" is visible',[step('fill','Search products','lamp'),step('keyboard')]],
+ ['Enable notifications','Enable the "Notifications" switch.','switch "Notifications" is checked',[step('check','Notifications')]],
+ ['Disable notifications','Disable the "Notifications" switch.','switch "Notifications" is unchecked',[step('uncheck','Notifications')]],
+ ['Scroll down','Scroll down once.','text "Preference 10" is visible',[step('scroll','down')]],
+ ['Scroll up','Scroll up once.','text "Preference 1" is visible',[step('scroll','up')]],
+ ['Back','Go back once.','text "Catalog" is visible',[step('back')]],
+ ['Keyboard','Dismiss the keyboard.','text "Catalog" is visible',[step('keyboard')]],
+ ['Restart','Relaunch the app, keeping its data.','text "Saved" is visible',[step('relaunch')]],
+ ['Wait','Wait for the exact text "Ready" to appear.','text "Ready" is visible',[step('wait','Ready')]],
+ ['Add lamp','Tap "Open Desk Lamp", then tap "Add to cart".','text "Quantity: 1" is visible',[step('click','Open Desk Lamp'),step('click','Add to cart')]],
+ ['Quantity','Tap "Increase Desk Lamp quantity".','number in field "Cart total" equals 72',[step('click','Increase Desk Lamp quantity')]],
+ ['Remove','Tap "Remove Desk Lamp".','text "Your cart is empty" is visible',[step('click','Remove Desk Lamp')]],
+ ['Literal unicode','Replace "Search products" with "café ☕".','field "Search products" equals "café ☕"',[step('fill','Search products','café ☕')]],
+ ['Exact punctuation','Replace "Search products" with "Lamp - 2.0".','field "Search products" equals "Lamp - 2.0"',[step('fill','Search products','Lamp - 2.0')]],
+ ['Valid sign in','Fill "Email" using @email, fill "Password" using @password, then tap "Sign in".','text "Find your favorite." is visible',[step('fill','Email',null,'email'),step('fill','Password',null,'password'),step('click','Sign in')]],
+ ['Reject wrong password','Fill "Email" using @email, fill "Password" using @invalidPassword, then tap "Sign in" with those invalid credentials.','text "Invalid credentials" is visible',[step('fill','Email',null,'email'),step('fill','Password',null,'invalidPassword'),step('click','Sign in')]],
+ ['Persist cart','Tap "Open Desk Lamp", tap "Add to cart", relaunch the app, then tap "Cart".','text "Desk Lamp" is visible',[step('click','Open Desk Lamp'),step('click','Add to cart'),step('relaunch'),step('click','Cart')]],
+ ['Empty input','Replace "Search products" with "".','field "Search products" equals ""',[step('fill','Search products','')]],
+];
+const outcomes=[],provider=providerOptions({maxCost:cap});
+for(const platform of ['ios','android'])for(let i=0;i<descriptions.length;i++){
+ const batch=descriptions.slice(i,i+1);const text=batch.map(([name,goal,expect])=>`Case: ${name}\nGoal: ${goal}\nExpect: ${expect}`).join('\n\n');
+ try{const plan=await compileNative(text,platform,'on',fixtures,provider,AbortSignal.timeout(30000),[]);for(let n=0;n<batch.length;n++){const test=plan.cases[n];const accepted=!test.blockedReason&&JSON.stringify(test.steps)===JSON.stringify(batch[n][3]);outcomes.push({platform,name:batch[n][0],accepted,expectedSteps:batch[n][3],test});console.log(platform,batch[n][0],accepted?'PASS':'FAIL');}}catch(e){outcomes.push({platform,batch:i,error:e.message});console.log(platform,'ERROR',e.message);}
+}
+const path=resolve(values.out??'.jev-e2e/mobile-language.json');await mkdir(dirname(path),{recursive:true,mode:0o700});await writeFile(path,JSON.stringify({outcomes,stats:provider.stats},null,2),{mode:0o600});console.log('COUNTS',outcomes.filter(o=>o.accepted).length,'/40',provider.stats);process.exitCode=['ios','android'].every(platform=>outcomes.filter(o=>o.platform===platform&&o.accepted).length>=19)?0:1;

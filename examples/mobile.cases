@@ -1,0 +1,54 @@
+Case: Invalid login is rejected
+Goal: Verify that invalid credentials cannot sign in
+Step: Fill "Email" with @email
+Step: Fill "Password" with @invalidPassword
+Step: Tap "Sign in"
+Expect: text "Invalid credentials" is visible
+
+Case: Search filters the catalog
+Goal: Find the lamp and exclude unrelated products
+Step: Fill "Email" with @email
+Step: Fill "Password" with @password
+Step: Tap "Sign in"
+Expect: text "Find your favorite." is visible
+Step: Fill "Search products" with "lamp"
+Step: Dismiss keyboard
+Expect: text "Desk Lamp" is visible
+Expect: text "AirPods" is absent
+
+Case: Quantity updates the total
+Goal: Two lamps should cost 72
+Step: Fill "Email" with @email
+Step: Fill "Password" with @password
+Step: Tap "Sign in"
+Step: Tap "Open Desk Lamp"
+Step: Tap "Add to cart"
+Expect: text "Quantity: 1" is visible
+Step: Tap "Increase Desk Lamp quantity"
+Expect: text "Quantity: 2" is visible
+Expect: number in id "cart-total" equals 72
+
+Case: Removal empties the cart
+Goal: Remove a lamp and verify the empty state
+Step: Fill "Email" with @email
+Step: Fill "Password" with @password
+Step: Tap "Sign in"
+Step: Tap "Open Desk Lamp"
+Step: Tap "Add to cart"
+Expect: text "Desk Lamp" is visible
+Step: Tap "Remove Desk Lamp"
+Expect: text "Your cart is empty" is visible
+Expect: text "Desk Lamp" is absent
+
+Case: Cart persists after relaunch
+Goal: Restart the app and verify the saved cart
+Step: Fill "Email" with @email
+Step: Fill "Password" with @password
+Step: Tap "Sign in"
+Step: Tap "Open Desk Lamp"
+Step: Tap "Add to cart"
+Expect: text "Desk Lamp" is visible
+Step: Relaunch
+Step: Tap "Cart"
+Expect: text "Desk Lamp" is visible
+Expect: text "Quantity: 1" is visible
