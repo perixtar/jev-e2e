@@ -150,8 +150,11 @@ test('the 20 published mobile language goals pass the freeform preflight on both
     assert.equal(requests,1,goal);assert.deepEqual(result,expected,goal);
   }
 });
-test('an internal device command timeout cannot dispatch on a replacement worker during cleanup',async()=>{
+test('an internal device command timeout cannot dispatch on a replacement worker during cleanup',async t=>{
  const connection=new DeviceConnection('ios'),worker=new EventEmitter();let kills=0,commands=[];
+ // A real worker keeps IPC alive; the mock needs a live handle for AbortSignal.timeout.
+ const workerLiveness=setInterval(()=>{},1000);
+ t.after(()=>clearInterval(workerLiveness));
  worker.kill=()=>{kills++;return true;};worker.send=(message,callback)=>{commands.push(message.command);callback?.();if(message.command==='close')setImmediate(()=>worker.emit('message',{id:message.id,value:{}}));return true;};
  connection.start=()=>{connection.worker=worker;return worker;};connection.worker=worker;connection.ownsSession=true;
  const outside=new AbortController();await assert.rejects(connection.call('snapshot',{},outside.signal,10),/deadline/);assert.equal(outside.signal.aborted,false);
