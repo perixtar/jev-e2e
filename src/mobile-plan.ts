@@ -93,7 +93,6 @@ function privateInputLiteral(text: string): boolean {
       const candidate = expectedText?.[1] ?? expectedValue?.[1];
       if (candidate !== undefined && secretShaped(quote(candidate))) return true;
     }
-    let authored = line.replace(fixtureBinding, '').replace(/@[A-Za-z0-9_.-]+/g, '');
     if (field?.[1].toLowerCase() === 'step') {
       try {
         const step = nativeStep(body);
@@ -111,12 +110,17 @@ function privateInputLiteral(text: string): boolean {
       }
       continue;
     }
-    if (sensitiveInputTarget(authored)) return true;
   }
   const authored = text.replace(fixtureBinding, '').replace(/@[A-Za-z0-9_.-]+/g, '');
-  if (/\b(?:password|passcode|pin|otp|one[- ]time(?:\s+(?:password|code))?|verification\s+code|security\s+code|credit\s+card|card\s+number|cvv|cvc|social\s+security(?:\s+number)?|ssn|token|secret|api.?key|e-?mail|user\s*name)\b"?\s*(?:with|using|=|is|:|to|should\s+be)\s*(?!@)(?:"[^"\n]+"|[^\s,.;]+)/i.test(authored)) return true;
+  if (/\b(?:password|passcode|pin|otp|one[- ]time(?:\s+(?:password|code))?|verification\s+code|security\s+code|credit\s+card|card\s+number|cvv|cvc|social\s+security(?:\s+number)?|ssn|token|secret|api.?key|e-?mail|user\s*name)\b"?(?:\s+field)?\s*(?:with|using|=|is|:|to|should\s+be)\s*(?!@)(?:"[^"\n]+"|[^\s,.;]+)/i.test(authored)) return true;
+  if (/\b(?:for|in)\s+(?:the\s+)?"?(?:password|passcode|pin|otp|one[- ]time(?:\s+(?:password|code))?|verification\s+code|security\s+code|credit\s+card|card\s+number|cvv|cvc|social\s+security(?:\s+number)?|ssn|token|secret|api.?key|e-?mail|user\s*name)\b"?(?:\s+field)?\s*[,;:]\s*(?:enter|type|input|use|fill|replace|set|put|paste|provide)\s+(?:code\s+)?(?!@)(?:"[^"\n]+"|'[^'\n]+'|\d[\d -]{2,20}\d|[A-Za-z0-9][A-Za-z0-9._-]{2,})/i.test(authored)) return true;
   if (/\b(?:enter|type|input|use|fill|replace|set|put|paste|provide)\s+(?:code\s+)?(?!@)(?:"[^"\n]+"|'[^'\n]+'|\d[\d -]{2,20}\d|[A-Za-z0-9][A-Za-z0-9._-]{2,})\s+(?:in|into|for|as)\s+(?:the\s+)?"?(?:password|passcode|pass\s*phrase|pin|otp|one[- ]time(?:\s+(?:password|code))?|verification\s+code|security\s+code|credit\s+card|card\s+number|cvv|cvc|social\s+security(?:\s+number)?|ssn|token|secret|api.?key|e-?mail|user\s*name|login(?:\s+(?:id|name))?)\b/i.test(authored)) return true;
   for (const line of authored.split('\n')) {
+    if (/\b(?:sign[- ]?in|log[- ]?in|login|authenticate|authentication)\b/i.test(line)) {
+      for (const token of line.match(/[A-Za-z0-9][A-Za-z0-9._+@/-]*/g) ?? []) {
+        if (!/^(?:sign-in|log-in|one-time)$/i.test(token) && !sensitiveInputTarget(token) && secretShaped(token)) return true;
+      }
+    }
     const login = line.match(/\b(?:sign\s*in|log\s*in|authenticate)\b\s+(?:with|using)\s+(.+?)(?:,?\s+then\b|$)/i);
     if (!login) continue;
     if (/"[^"\n]+"|'[^'\n]+'/.test(login[1])) return true;

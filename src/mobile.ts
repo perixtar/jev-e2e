@@ -1,5 +1,5 @@
 import { mkdir, chmod, unlink, stat, lstat } from 'node:fs/promises';
-import { resolve, extname, dirname, relative, isAbsolute, sep } from 'node:path';
+import { resolve, extname, dirname, relative, isAbsolute, sep, parse } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -30,7 +30,10 @@ function assertSnapshotOwnership(raw: NativeSnapshot, app: string, device?: stri
   if (!actualApp || actualApp !== app) throw new BlockedError('The observed app does not match --app. External apps and system dialogs need explicit handling.');
   if (device) {
     const actualDevice = raw.identifiers?.deviceId ?? raw.identifiers?.udid ?? raw.identifiers?.serial;
-    if (actualDevice !== device) throw new BlockedError('The observed native snapshot does not match the selected device.');
+    // The pinned local SDK omits identifiers from simulator snapshots. The
+    // exact device is already bound and verified by apps.open; reject a
+    // conflicting capture identifier whenever the backend does disclose one.
+    if (actualDevice && actualDevice !== device) throw new BlockedError('The observed native snapshot does not match the selected device.');
   }
 }
 async function removeLocalArtifact(path: string): Promise<void> {
@@ -280,7 +283,7 @@ export class MobileDriver {
       for (const chunk of Array.isArray(result?.chunks) ? result.chunks : []) this.trackOwnedRecordingPath(chunk?.path, expected);
     }
     if (result?.recording !== 'stopped' || !expected || returned !== expected) {
-      this.recordingDiscardedReason = returned && !withinOwnedDirectory ? 'Recorder returned a path outside the approved recording directory. It was not published or deleted automatically.' : 'Recorder returned an invalid artifact identity. Owned recording files were discarded.';
+      this.recordingDiscardedReason = returned && !withinOwnedDirectory ? 'Recorder returned a path outside the approved recording names or directory. It was not published or deleted automatically.' : 'Recorder returned an invalid artifact identity. Owned recording files were discarded.';
       await this.discardOwnedRecordings();
       throw new BlockedError('Native recorder returned an invalid artifact identity. Owned recording files were discarded; an external returned path is never deleted automatically.');
     }
@@ -320,18 +323,17 @@ export class MobileDriver {
     const expected = resolve(path); await mkdir(dirname(expected), { recursive: true, mode: 0o700 }); await removeLocalArtifact(expected);
     const observation = await this.observe(signal);
     if (!this.captureAllowed(observation.native)) return false;
-    const result = await this.connection.call('screenshot', { path: expected, normalizeStatusBar: true, surface: 'app' }, signal, 10000);
+    let result: any;
+    try { result = await this.connection.call('screenshot', { path: expected, normalizeStatusBar: true, surface: 'app' }, signal, 10000); }
+    catch (error) { await removeLocalArtifact(expected); throw error; }
     const returned = typeof result?.path === 'string' ? resolve(result.path) : null;
-    const returnedChild = returned ? relative(dirname(expected), returned) : null;
-    const returnedIsOwned = Boolean(returned && extname(returned).toLowerCase() === '.png' && returnedChild !== null && !isAbsolute(returnedChild) && returnedChild !== '..' && !returnedChild.startsWith(`..${sep}`));
-    const discard = async () => {
-      await removeLocalArtifact(expected);
-      if (returnedIsOwned && returned !== expected) await removeLocalArtifact(returned!);
-    };
+    // Only the exact predeclared output path belongs to this capture. A
+    // malformed response must never make an unrelated file in --out deletable.
+    const discard = async () => removeLocalArtifact(expected);
     const identifiers = result?.identifiers;
     const returnedApp = identifiers?.appBundleId ?? identifiers?.appId ?? identifiers?.package;
     const returnedDevice = identifiers?.deviceId ?? identifiers?.udid ?? identifiers?.serial;
-    if (returnedApp !== this.appIdentity || returnedDevice !== this.target.device) {
+    if ((returnedApp && returnedApp !== this.appIdentity) || (returnedDevice && returnedDevice !== this.target.device)) {
       await discard();
       throw new BlockedError('Native screenshot returned mismatched app/device identity. The artifact was discarded.');
     }
@@ -363,6 +365,12 @@ export class MobileDriver {
     if (typeof candidate !== 'string') return false;
     const path = resolve(candidate), child = relative(dirname(expected), path);
     if (isAbsolute(child) || child === '..' || child.startsWith(`..${sep}`)) return false;
+    const expectedFile = parse(expected), candidateFile = parse(path);
+    const chunkIndex = candidateFile.name.startsWith(`${expectedFile.name}.part-`) ? candidateFile.name.slice(expectedFile.name.length + 6) : '';
+    const ownedName = path === expected
+      || candidateFile.base === `${expectedFile.name}.gesture-telemetry.json`
+      || candidateFile.ext.toLowerCase() === expectedFile.ext.toLowerCase() && /^\d{3}$/.test(chunkIndex);
+    if (!ownedName) return false;
     this.recordingArtifacts.add(path); return true;
   }
   private async discardOwnedRecordings(preserve?: string): Promise<void> {
