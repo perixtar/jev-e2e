@@ -42,7 +42,7 @@ function matchesDisclosedIdentity(expected: string, aliases: unknown[]): boolean
 }
 function assertOpenedIdentity(result: any, app: string, device: string): void {
   const selected = result?.device;
-  if (!matchesDisclosedIdentity(app, [result?.appBundleId, result?.appId, result?.package, result?.bundleId, result?.identifiers?.appBundleId, result?.identifiers?.appId, result?.identifiers?.package])
+  if (!matchesDisclosedIdentity(app, [result?.appBundleId, result?.appId, result?.package, result?.bundleId, result?.identifiers?.appBundleId, result?.identifiers?.appId, result?.identifiers?.package, selected?.identifiers?.appBundleId, selected?.identifiers?.appId, selected?.identifiers?.package])
     || result?.appBundleId !== app
     || !matchesDisclosedIdentity(device, [selected?.id, selected?.identifiers?.deviceId, selected?.identifiers?.udid, selected?.identifiers?.serial, result?.identifiers?.deviceId, result?.identifiers?.udid, result?.identifiers?.serial])
     || selected?.id !== device) throw new BlockedError('Native open selected a different app/device.');

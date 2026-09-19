@@ -16,6 +16,9 @@ function negatedNativeAction(text: string): boolean {
   }
   return false;
 }
+function conditionalNativeAction(text: string): boolean {
+  return /\b(?:if|unless|otherwise|only\s+(?:if|when)|in\s+case|provided\s+that)\b/i.test(text.split('\n').filter(line => /^(?:Goal|Step):/i.test(line)).join('\n'));
+}
 export function nativeStep(text: string): Step {
   if (/^(relaunch|back|dismiss keyboard)$/i.test(text)) return empty(/^dismiss/i.test(text) ? 'keyboard' : text.toLowerCase() as Step['action']);
   let m = text.match(/^(tap|click|check|uncheck|enable|disable) "((?:\\.|[^"\\])*)"$/i);
@@ -128,11 +131,16 @@ function privateInputLiteral(text: string): boolean {
     }
   }
   const authored = text.replace(fixtureBinding, '').replace(/@[A-Za-z0-9_.-]+/g, '');
-  const credentialNoun = '(?:password|passcode|pass\\s*phrase|pin|otp|one[- ]time(?:\\s+(?:password|code))?|verification\\s+code|security\\s+code|access\\s+token|token|secret|api.?key)';
-  const conceptual = /^(?:login|test|entry|refresh|reset|flow|validation|field|target|expectation|is|should|works|fails|expired|invalid|valid|missing|rejected|accepted|fixture|fixtures|input|inputs|screen|page|form|success|failure|with)$/i;
+  // Credential-bearing titles/goals have a deliberately small public-vocabulary
+  // grammar. Any extra word could itself be a short username or secret; it
+  // must stay local until the author replaces it with an @fixture binding.
+  const publicWords = new Set('a an the and or to for in on of with without as is was are be been should can cannot not that this those then after before use enter type fill check verify test inspect confirm reject wrong invalid valid missing accepted rejected expired works fails login log sign safely safe flow success failure page screen form field target entry reset refresh validation expectation fixture fixtures input inputs credentials email e-mail user name username password passcode pass phrase passphrase pin otp one time verification security code access token secret api key credit card number cvv cvc social ssn account'.split(' '));
   for (const line of authored.split('\n')) {
-    const match = line.match(new RegExp('\\b' + credentialNoun + '\\s+([A-Za-z0-9._+-]{3,})\\b', 'i'));
-    if (match && !conceptual.test(match[1])) return true;
+    if (!/^(?:Case|Goal):/i.test(line)) continue;
+    const remaining = line.replace(nativeActionExpression(), '');
+    if (!sensitiveInputTarget(remaining) && !/\blogin\b/i.test(remaining)) continue;
+    const words = remaining.replace(/^(?:Case|Goal):/i, '').match(/[A-Za-z0-9][A-Za-z0-9._+-]*/g) ?? [];
+    if (words.some(word => !publicWords.has(word.toLowerCase()))) return true;
   }
   // A credential does not need to look random to be private. Catch the common
   // username/password sentence shapes after removing fixture references so
@@ -171,6 +179,7 @@ function privateInputLiteral(text: string): boolean {
 export async function compileNative(text: string, platform: 'ios' | 'android', mode: 'on' | 'off', fixtures: Fixtures, provider: ProviderOptions, signal: AbortSignal, secrets: string[]): Promise<Suite> {
   signal.throwIfAborted();
   if (negatedNativeAction(text)) throw new BlockedError('Negative native action clauses are ambiguous. Describe only the actions that should run.');
+  if (conditionalNativeAction(text)) throw new BlockedError('Conditional native actions need explicit branch semantics. Split the cases or use unconditional Step lines and exact expectations.');
   const authoredLiteral = authoredNativeSteps(text).some(step => step.action === 'fill' && step.value !== null && sensitiveInputTarget(step.target ?? ''));
   const targetFirstLiteral = /"(?:password|passcode|pass\s*phrase|pin|otp|one[- ]time(?:\s+(?:password|code))?|verification\s+code|security\s+code|credit\s+card|card\s+number|cvv|cvc|social\s+security(?:\s+number)?|ssn|token|secret|api.?key|e-?mail|user\s*name)"?\s*(?:with|using|=|is)\s*"/i.test(text);
   const valueFirstLiteral = /\b(?:enter|type|fill|replace)\s+"(?:\\.|[^"\\])+"\s+(?:in|into|for)\s+"?(?:password|passcode|pin|otp|verification\s+code|security\s+code|credit\s+card|card\s+number|cvv|cvc|social\s+security|ssn|token|secret|api.?key|e-?mail|user\s*name)\b/i.test(text);
