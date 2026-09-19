@@ -36,6 +36,17 @@ function assertSnapshotOwnership(raw: NativeSnapshot, app: string, device?: stri
     if (disclosed.some(value => value !== device)) throw new BlockedError('The observed native snapshot does not match the selected device.');
   }
 }
+function matchesDisclosedIdentity(expected: string, aliases: unknown[]): boolean {
+  const disclosed = aliases.filter(value => value !== undefined && value !== null);
+  return disclosed.length > 0 && disclosed.every(value => value === expected);
+}
+function assertOpenedIdentity(result: any, app: string, device: string): void {
+  const selected = result?.device;
+  if (!matchesDisclosedIdentity(app, [result?.appBundleId, result?.appId, result?.package, result?.bundleId, result?.identifiers?.appBundleId, result?.identifiers?.appId, result?.identifiers?.package])
+    || result?.appBundleId !== app
+    || !matchesDisclosedIdentity(device, [selected?.id, selected?.identifiers?.deviceId, selected?.identifiers?.udid, selected?.identifiers?.serial, result?.identifiers?.deviceId, result?.identifiers?.udid, result?.identifiers?.serial])
+    || selected?.id !== device) throw new BlockedError('Native open selected a different app/device.');
+}
 async function removeLocalArtifact(path: string): Promise<void> {
   try { await unlink(path); }
   catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw new BlockedError('Could not clear the requested local artifact path before capture.'); }
@@ -139,13 +150,13 @@ export class MobileDriver {
       if (extension !== expected) throw new BlockedError(`${this.target.platform} build paths must end in ${expected}.`);
       const installed = await this.connection.call('install', { ...this.selection, appPath }, signal, 60000);
       const identity = installed.bundleId ?? installed.package ?? installed.appId;
-      const installedDevice = installed.identifiers?.deviceId ?? installed.identifiers?.udid ?? installed.identifiers?.serial;
-      if (!identity || installedDevice !== this.target.device) throw new BlockedError('Installed build did not expose the selected device and app identity.');
+      if (!identity || !matchesDisclosedIdentity(identity, [installed.bundleId, installed.package, installed.appId, installed.identifiers?.appBundleId, installed.identifiers?.appId, installed.identifiers?.package])
+        || !matchesDisclosedIdentity(this.target.device, [installed.identifiers?.deviceId, installed.identifiers?.udid, installed.identifiers?.serial])) throw new BlockedError('Installed build did not expose the selected device and app identity.');
       this.appIdentity = identity;
     } else if (pathLike) throw new BlockedError('Native build path does not exist. Pass an existing .app/.apk path or an installed app ID.');
     this.opened = true;
     const result = await this.connection.call('open', { ...this.selection, app: this.appIdentity, relaunch: true, timeoutMs: 60000 }, signal, 60000);
-    if (result.device?.id !== this.target.device || result.appBundleId !== this.appIdentity) throw new BlockedError('Native open selected a different app/device.');
+    assertOpenedIdentity(result, this.appIdentity, this.target.device);
     this.ready = true;
   }
   async observe(signal: AbortSignal): Promise<NativeObservation> {
@@ -213,7 +224,8 @@ export class MobileDriver {
   async direct(step: Step, signal: AbortSignal, onDispatch: () => void = () => {}): Promise<void> {
     if (step.action === 'relaunch') {
       onDispatch(); const opened = await this.connection.call('open', { ...this.selection, app: this.appIdentity, relaunch: true }, signal, 15000);
-      if (opened.device?.id !== this.target.device || opened.appBundleId !== this.appIdentity) throw new BlockedError('Native relaunch selected a different app/device.');
+      try { assertOpenedIdentity(opened, this.appIdentity, this.target.device); }
+      catch { throw new BlockedError('Native relaunch selected a different app/device.'); }
     }
     else if (step.action === 'back') { await this.observe(signal); onDispatch(); await this.connection.call('back', { settle: true, settleQuietMs: 100, timeoutMs: 1500 }, signal, 10000); }
     else if (step.action === 'keyboard') {

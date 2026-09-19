@@ -119,10 +119,6 @@ function privateInputLiteral(text: string): boolean {
     if (field?.[1].toLowerCase() === 'case') {
       const withoutFixtures = body.replace(/@[A-Za-z0-9_.-]+/g, '');
       if (sensitiveInputTarget(withoutFixtures)) {
-        // A short code is still private when it follows a credential noun,
-        // even when it has no punctuation or token-like entropy.
-        const titleValue = withoutFixtures.match(/\b(?:password|passcode|pin|otp|one[- ]time(?:\s+(?:password|code))?|verification\s+code|security\s+code|access\s+token|token|secret|api.?key)\s+([A-Za-z0-9._+-]{3,})\b/i)?.[1];
-        if (titleValue && !/^(?:login|test|entry|refresh|reset|flow|validation|field|target|expectation|is|should|works|fails|expired|invalid|valid|missing|rejected|accepted)$/i.test(titleValue)) return true;
         for (const match of withoutFixtures.matchAll(/"((?:\\.|[^"\\])+)"|'((?:\\.|[^'\\])+)'|\b([A-Za-z0-9][A-Za-z0-9._+@/-]*)\b/g)) {
           const candidate = match[1] ?? match[2] ?? match[3];
           if (((match[1] !== undefined || match[2] !== undefined) && !sensitiveInputTarget(candidate)) || secretShaped(candidate)) return true;
@@ -132,6 +128,12 @@ function privateInputLiteral(text: string): boolean {
     }
   }
   const authored = text.replace(fixtureBinding, '').replace(/@[A-Za-z0-9_.-]+/g, '');
+  const credentialNoun = '(?:password|passcode|pass\\s*phrase|pin|otp|one[- ]time(?:\\s+(?:password|code))?|verification\\s+code|security\\s+code|access\\s+token|token|secret|api.?key)';
+  const conceptual = /^(?:login|test|entry|refresh|reset|flow|validation|field|target|expectation|is|should|works|fails|expired|invalid|valid|missing|rejected|accepted|fixture|fixtures|input|inputs|screen|page|form|success|failure|with)$/i;
+  for (const line of authored.split('\n')) {
+    const match = line.match(new RegExp('\\b' + credentialNoun + '\\s+([A-Za-z0-9._+-]{3,})\\b', 'i'));
+    if (match && !conceptual.test(match[1])) return true;
+  }
   // A credential does not need to look random to be private. Catch the common
   // username/password sentence shapes after removing fixture references so
   // short values such as "letmein" never reach the planner.
@@ -140,13 +142,13 @@ function privateInputLiteral(text: string): boolean {
     new RegExp('\\b(?:sign\\s*in|log\\s*in)\\s+as\\s+' + authToken + '\\s+(?:with|using)\\s+(' + authToken + ')', 'i'),
     new RegExp('\\b(?:use|enter|type|provide)\\s+(' + authToken + ')\\s+to\\s+(?:sign\\s*in|log\\s*in|authenticate)\\b', 'i'),
     new RegExp('\\bauthenticate\\s+' + authToken + '\\s*(?:/|\\||with|using)\\s*(' + authToken + ')', 'i'),
-    new RegExp('\\blogin\\s+(?!(?:is|was|should|must|can|cannot|will|remains|fails|succeeds|works|with|using|without|after|before|when)\\b)' + authToken + '\\s+(' + authToken + ')', 'i'),
+    new RegExp('\\blogin[ \\t]+(?!(?:is|was|should|must|can|cannot|will|remains|fails|succeeds|works|with|using|without|after|before|when)\\b)' + authToken + '[ \\t]+(' + authToken + ')', 'i'),
   ];
   if (authLiteralPatterns.some(pattern => pattern.test(authored))) return true;
   const unboundIdentityPatterns = [
     new RegExp('\\b(?:sign\\s*in|log\\s*in)\\s+as\\s+' + authToken + '\\b', 'i'),
     new RegExp('\\bauthenticate\\s+' + authToken + '\\b', 'i'),
-    new RegExp('^[ \\t]*Case:[ \\t]*Login[ \\t]+' + authToken + '\\b', 'im'),
+    new RegExp('^[ \\t]*Case:[ \\t]*Login[ \\t]+(?!(?:flow|success|page|with|failure|failed|rejected|invalid|valid|test|screen|form|state)\\b)' + authToken + '\\b', 'im'),
   ];
   if (unboundIdentityPatterns.some(pattern => pattern.test(authored))) return true;
   if (/\b(?:password|passcode|pin|otp|one[- ]time(?:\s+(?:password|code))?|verification\s+code|security\s+code|credit\s+card|card\s+number|cvv|cvc|social\s+security(?:\s+number)?|ssn|token|secret|api.?key|e-?mail|user\s*name)\b"?(?:\s+field)?\s*(?:with|using|=|is|:|to|should\s+be)\s*(?!@)(?:"[^"\n]+"|[^\s,.;]+)/i.test(authored)) return true;
@@ -180,13 +182,17 @@ export async function compileNative(text: string, platform: 'ios' | 'android', m
   // Explicit unsupported steps are a user contract, never a request to invent replacements.
   if (/^Step:/im.test(text)) return baseline;
   const blocks = splitCases(text);
-  const sourceBlocks = blocks.map(block => ({ ...block, requiredSteps: authoredNativeSteps(block.source), requiredAssertions: block.source.split('\n').filter(line => /^Expect:/i.test(line)).map(line => nativeExpectation(line.replace(/^Expect:\s*/i, ''))) }));
+  const sourceBlocks = blocks.map(block => {
+    const goals = [...block.source.matchAll(/^Goal:\s*(.*)$/gim)];
+    if (goals.length !== 1 || !goals[0][1].trim()) throw new BlockedError('Every mobile case needs exactly one authored Goal.');
+    return { ...block, goal: goals[0][1], requiredSteps: authoredNativeSteps(block.source), requiredAssertions: block.source.split('\n').filter(line => /^Expect:/i.test(line)).map(line => nativeExpectation(line.replace(/^Expect:\s*/i, ''))) };
+  });
   if (sourceBlocks.some(block => !block.requiredAssertions.length)) throw new BlockedError('Add explicit Expect lines. Tests need authored correctness criteria.');
   const suite = validateSuite(await interpret(JSON.stringify({ sourceBlocks }), { inputs: Object.keys(fixtures.inputs), auth: [] }, provider, signal, platform));
   if (suite.version !== 2 || suite.platform !== platform || suite.cases.length !== blocks.length) throw new BlockedError('Planner changed the platform or case count.');
   for (let i = 0; i < blocks.length; i++) {
     const test = suite.cases[i], block = blocks[i];
-    if (test.name !== block.name || test.source !== block.source || test.auth) throw new BlockedError('Planner changed a case identity or native authentication contract.');
+    if (test.name !== block.name || test.source !== block.source || test.goal !== sourceBlocks[i].goal || test.auth) throw new BlockedError('Planner changed a case identity, goal, or native authentication contract.');
     if (test.blockedReason) continue;
     const requiredSteps = sourceBlocks[i].requiredSteps;
     if (!requiredSteps.length || test.steps.length !== requiredSteps.length || test.steps.some((step, index) => JSON.stringify(step) !== JSON.stringify(requiredSteps[index]))) throw new BlockedError('Planner added or changed an authored action, input binding, or action order. Use explicit Step lines when an action cannot be recognized safely.');
