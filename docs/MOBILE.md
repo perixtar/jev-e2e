@@ -33,9 +33,7 @@ For free-form goals, leave the optional planner on:
 
 ```text
 Case: A lamp survives a restart
-Goal: Fill "Email" using @email, fill "Password" using @password,
-then tap "Sign in". Tap "Open Desk Lamp", tap "Add to cart",
-relaunch the app, then tap "Cart".
+Goal: Fill "Email" using @email, fill "Password" using @password, then tap "Sign in". Tap "Open Desk Lamp", tap "Add to cart", relaunch the app, then tap "Cart".
 Expect: text "Desk Lamp" is visible
 Expect: text "Quantity: 1" is visible
 ```
@@ -47,6 +45,8 @@ jev-e2e plan --platform ios --app com.example.app \
   --cases mobile.cases --fixtures fixtures.json --out reviewed.json
 jev-e2e run --plan reviewed.json --device EXACT_ID
 ```
+
+Keep each `Goal:` on one physical line. A wrapped continuation, including an unprefixed action or credential, blocks before any provider call; use explicit `Step:` lines when a flow is long.
 
 For explicit steps, use `--planner off`. Explicit cases and saved plans need no prose-planner call. An unchanged saved flow can run with zero model calls; a stale target uses Jev for repair. Live discovery uses Jev through `OPENROUTER_API_KEY`; a separate OpenAI key is unnecessary.
 

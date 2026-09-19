@@ -17,7 +17,8 @@ function negatedNativeAction(text: string): boolean {
   return false;
 }
 function conditionalNativeAction(text: string): boolean {
-  return /\b(?:if|unless|otherwise|only\s+(?:if|when)|in\s+case|provided\s+that)\b/i.test(text.split('\n').filter(line => /^(?:Goal|Step):/i.test(line)).join('\n'));
+  const intent = nativeIntent(text);
+  return /\b(?:if|unless|otherwise|when|in\s+case|provided\s+that)\b|\bafter\b[^.?!;\n]*?\b(?:is|are|becomes?|turns?|appears?|exists?|loads?|ready|visible|present|enabled|checked|updates?|changes?)\b/i.test(intent);
 }
 export function nativeStep(text: string): Step {
   if (/^(relaunch|back|dismiss keyboard)$/i.test(text)) return empty(/^dismiss/i.test(text) ? 'keyboard' : text.toLowerCase() as Step['action']);
@@ -186,6 +187,7 @@ function privateInputLiteral(text: string): boolean {
 }
 export async function compileNative(text: string, platform: 'ios' | 'android', mode: 'on' | 'off', fixtures: Fixtures, provider: ProviderOptions, signal: AbortSignal, secrets: string[]): Promise<Suite> {
   signal.throwIfAborted();
+  if (text.split('\n').some(line => line.trim() && !/^(?:Case|Goal|Step|Expect):/i.test(line))) throw new BlockedError('Native cases use one line per Case, Goal, Step, or Expect. Keep free-form prose on a single Goal line.');
   if (negatedNativeAction(text)) throw new BlockedError('Negative native action clauses are ambiguous. Describe only the actions that should run.');
   if (conditionalNativeAction(text)) throw new BlockedError('Conditional native actions need explicit branch semantics. Split the cases or use unconditional Step lines and exact expectations.');
   const authoredLiteral = authoredNativeSteps(text).some(step => step.action === 'fill' && step.value !== null && sensitiveInputTarget(step.target ?? ''));

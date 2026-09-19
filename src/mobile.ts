@@ -226,6 +226,20 @@ export class MobileDriver {
       onDispatch(); const opened = await this.connection.call('open', { ...this.selection, app: this.appIdentity, relaunch: true }, signal, 15000);
       try { assertOpenedIdentity(opened, this.appIdentity, this.target.device); }
       catch { throw new BlockedError('Native relaunch selected a different app/device.'); }
+      // The iOS backend can expose a partial tree just after open, then attach
+      // full-screen accessibility groups a moment later. Wait for a steady
+      // semantic tree before choosing the next target; keep exact fingerprints.
+      const started = Date.now(), deadline = started + 5000;
+      let previous: string | undefined, steady = false;
+      do {
+        const observed = await this.observe(signal);
+        const identity = JSON.stringify(observed.controls.map(control => control.fingerprint).sort());
+        steady = identity === previous;
+        if (steady && Date.now() - started >= (this.target.platform === 'ios' ? 900 : 400)) break;
+        previous = identity;
+        await delay(200, undefined, { signal });
+      } while (Date.now() < deadline);
+      if (!steady) throw new BlockedError('Native accessibility tree did not settle after relaunch. No following action was dispatched.');
     }
     else if (step.action === 'back') { await this.observe(signal); onDispatch(); await this.connection.call('back', { settle: true, settleQuietMs: 100, timeoutMs: 1500 }, signal, 10000); }
     else if (step.action === 'keyboard') {
